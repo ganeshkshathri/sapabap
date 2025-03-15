@@ -1,0 +1,462 @@
+*&---------------------------------------------------------------------*
+*& Report ZMM_PO_AMEND_FTP
+*&---------------------------------------------------------------------*
+*&*& Created by : Ganesh Kshathri - LTIMINDTREE                        *
+*& Requester : DNYANADA KATHALE - LNTPOWER                             *
+*& Created on : 26-03-2024                                             *
+*& Project : 10912-01                                                  *
+*& Ticket No : 120480                                                  *
+*& Workbench Req: Development - SEDK981561                             *
+*&---------------------------------------------------------------------*
+*&*& Changed by : Ganesh Kshathri - LTIMINDTREE                        *
+*& Requester : DNYANADA KATHALE - LNTPOWER                             *
+*& Created on : 08-07-2024                                             *
+*& Project : 10912-01                                                  *
+*& Ticket No : 121498                                                  *
+*& Workbench Req: Development - SEDK983221                             *
+*&---------------------------------------------------------------------*
+*&*& Changed by : Sneha Singh - LTIMINDTREE                            *
+*& Requester : Vaidehi Shah                                            *
+*& Changed on : 24-09-2024                                             *
+*& Changed code : sneha-122059                                         *
+*& Project : 10912-01                                                  *
+*& Ticket No : 122059                                                  *
+*& Workbench Req: Development - SEDK984089                             *
+*&---------------------------------------------------------------------*
+*&*& Changed by : Ajinkya Asawale - LTIMINDTREE                            *
+*& Requester : Vaidehi Shah                                            *
+*& Changed on : 13-11-2024                                             *
+*& Changed code : Aj-10681688                                        *
+*& Project : 10912-01                                                  *
+*& Ticket No : 122163                                                   *
+*& Workbench Req: Development - SEDK984550                             *
+*&---------------------------------------------------------------------*
+
+REPORT zmm_po_amend_ftp.
+
+TABLES : zpoekko,ekpo,ekko.
+TYPES : BEGIN OF lty_final,
+          bukrs       TYPE ekko-bukrs,
+          ebeln       TYPE zpoekko-ebeln,
+          amend       TYPE zpoekko-amend,
+          zprint_date TYPE zpoekko-zprint_date,
+          aedat       TYPE zpoekko-aedat,
+          waers       TYPE zpoekko-waers,
+          bsart       TYPE zpoekko-bsart,
+          lifnr       TYPE zpoekko-lifnr,
+          zamdate     TYPE zpoekko-zamdate,
+          amendby     TYPE v_username-name_text,
+          frgke       TYPE zpoekko-frgke,
+          basic       TYPE zpoekko-basic,
+          netpr       TYPE ekpo-netwr,
+          wkurs       TYPE ekko-wkurs,
+          vendor_name TYPE string,
+        END OF lty_final.
+TYPES : BEGIN OF lty_amend_temp,
+          ebeln     TYPE ekko-ebeln,
+          amend     TYPE zpoekko-amend,
+          name_text TYPE    v_username-name_text,
+          zamdate   TYPE zpoekko-zamdate,
+          basic     TYPE zpoekko-basic,
+          netpr     TYPE ekpo-netwr,
+        END OF lty_amend_temp.
+DATA :  it_final_amend  TYPE TABLE OF lty_amend_temp.
+
+SELECT-OPTIONS : p_name   FOR ekko-bukrs,
+             p_po_num  FOR zpoekko-ebeln ,
+             p_amend   FOR zpoekko-amend,
+             p_po_dat   FOR zpoekko-aedat,
+             p_a_dat    FOR zpoekko-zamdate.
+
+DATA : filename_3 TYPE string VALUE 'PO_Amend_'.
+DATA : lt_po_data  TYPE TABLE OF lty_final,
+       lt_po_data1 TYPE TABLE OF lty_final,
+       ls_po_data  TYPE zpoekko,
+       lv_filename TYPE string,
+       lv_csv_data TYPE string.
+
+DATA : l_slen TYPE i,
+       w_hdl  TYPE i,
+       c_key  TYPE i VALUE 26101957.
+
+
+DATA: BEGIN OF wa_csvdata,
+        line(5000),
+      END OF wa_csvdata.
+
+DATA: seltab_objnr TYPE TABLE OF rsparams.
+DATA : lv_basic     TYPE string,
+       lv_netpr     TYPE string,
+       lv_wkurs     TYPE string,
+       lv_waers     TYPE string,
+       lv_aedat     TYPE char15,
+       lv_zamdate   TYPE char15,
+       seltab_pr_po TYPE TABLE OF rsparams,
+       seltab_wa    LIKE LINE OF seltab_objnr.
+DATA : lv_bukrs TYPE ekko-bukrs.
+
+DATA: gt_csvdata LIKE TABLE OF wa_csvdata.
+DATA:  lv_data TYPE REF TO data.
+FIELD-SYMBOLS <lt_data> TYPE ANY TABLE.
+TYPES : BEGIN OF x_final_ftp,
+          str(10000),
+        END OF x_final_ftp.
+
+DATA: it_final_ftp TYPE TABLE OF  x_final_ftp,
+      wa_final_ftp LIKE LINE OF it_final_ftp.
+DATA: lv_name1      TYPE name1_gp,
+      lv_name2      TYPE name2_gp,
+      lv_name3      TYPE name3_gp,
+      lv_name4      TYPE name4_gp,
+      lv_final_name TYPE string.
+DATA : lv_flag_date_high TYPE c1.
+DATA: lv_input_amend_date TYPE sy-datum.
+
+DATA: lv_inp       TYPE char1 VALUE 'R',                               " Added by Aj-10681688
+      lv_temp_date TYPE sy-datum,                                " Added by Aj-10681688
+      it_po_amend  TYPE TABLE OF zmm_po_amend_tab,                " Added by Aj-10681688
+      wa_po_amend  TYPE  zmm_po_amend_tab,                        " Added by Aj-10681688
+      lv_zprdate   TYPE char15.                                   " Added by Aj-10681688
+
+START-OF-SELECTION.
+  IF p_a_dat IS NOT INITIAL.
+    CLEAR lv_input_amend_date.
+    lv_input_amend_date = p_a_dat-low.
+    DATA(p_a_dat_copy) = p_a_dat[].
+    DATA(p_a_dat_cpy) = p_a_dat.
+  ENDIF.
+  IF p_a_dat-high IS INITIAL AND p_a_dat-low IS NOT INITIAL.
+    CLEAR lv_flag_date_high.
+    p_a_dat-low = lv_input_amend_date - 7. "input-7 days value will be in low
+    p_a_dat-high = lv_input_amend_date . "input date will be in high
+    p_a_dat-option  = 'BT'.
+    lv_flag_date_high = 'X'.
+    MODIFY p_a_dat[] FROM p_a_dat  INDEX 1.
+  ENDIF.
+
+************************************************ S.O.C. by Aj-10681688 *****************************************
+  lv_temp_date = sy-datum - 1.
+*  SELECT  zbukrs ebeln amend aedat  waers bsart lifnr   FROM zpoekko "zamdate frgke removed as to fetched from another program
+*    INTO TABLE lt_po_data
+*    WHERE   ebeln IN p_po_num
+*    AND  amend IN p_amend
+*    AND  aedat IN p_po_dat
+*    AND ( zprint_date IN p_a_dat OR zamdate IN p_a_dat OR zpo_chng_dt IN p_a_dat OR aedat IN p_a_dat ).
+  SELECT  zbukrs ebeln amend zprint_date aedat waers bsart lifnr
+    FROM zpoekko "zamdate frgke removed as to fetched from another program
+    INTO TABLE lt_po_data
+    WHERE   ebeln IN p_po_num
+    AND  amend IN p_amend
+    AND  aedat IN p_po_dat
+    AND  frgke = 'R'
+    AND ( zamdate IN p_a_dat OR zpo_chng_dt IN p_a_dat OR aedat IN p_a_dat )
+    AND  zprint_date = lv_temp_date .
+************************************************ E.O.C. by Aj-10681688 *****************************************
+
+  IF lv_flag_date_high = 'X'.
+    CLEAR: p_a_dat-high,lv_flag_date_high.
+    p_a_dat-option  = 'EQ'.
+    MODIFY p_a_dat[] FROM p_a_dat  INDEX 1.
+  ENDIF.
+
+  IF sy-subrc <> 0 .
+    MESSAGE 'NO RECORD FOUND IN TABLE' TYPE 'S' DISPLAY LIKE 'E'.
+  ELSE.
+    LOOP AT lt_po_data INTO DATA(ls_po_data1).
+      SELECT SINGLE bukrs frgke wkurs FROM ekko
+        INTO ( ls_po_data1-bukrs , ls_po_data1-frgke , ls_po_data1-wkurs )
+        WHERE ebeln = ls_po_data1-ebeln.
+      MODIFY lt_po_data FROM ls_po_data1 TRANSPORTING bukrs frgke wkurs.
+    ENDLOOP.
+************************************************ S.O.C. by Aj-10681688 *****************************************
+    CLEAR:ls_po_data1.
+    LOOP AT lt_po_data INTO ls_po_data1.
+      ls_po_data1-frgke = lv_inp.
+      MODIFY lt_po_data FROM ls_po_data1 TRANSPORTING frgke.
+    ENDLOOP.
+************************************************ E.O.C. by Aj-10681688 *****************************************
+    IF p_name IS NOT INITIAL.
+      DELETE lt_po_data WHERE bukrs NOT IN p_name.
+    ENDIF.
+    LOOP AT lt_po_data INTO DATA(wa_po_data3).
+      seltab_wa-selname = 'S_EBELN'.
+      seltab_wa-sign = 'I'.
+      seltab_wa-option = 'EQ'.
+      seltab_wa-low = wa_po_data3-ebeln.
+      APPEND seltab_wa TO seltab_pr_po.
+      CLEAR seltab_wa.
+    ENDLOOP.
+
+    DELETE ADJACENT DUPLICATES FROM seltab_pr_po.
+
+    SORT lt_po_data BY ebeln amend.
+    "fetching from another program
+    IF seltab_pr_po IS NOT INITIAL.
+      cl_salv_bs_runtime_info=>set( EXPORTING display  = abap_false
+                                                  metadata = abap_false
+                                                  data     = abap_true ).
+
+      SUBMIT zmm_po_amendment_ftp WITH SELECTION-TABLE seltab_pr_po AND RETURN. " changed from zmm_po_amendment
+
+      TRY.
+          cl_salv_bs_runtime_info=>get_data_ref( IMPORTING r_data = lv_data ).
+          ASSIGN lv_data->* TO <lt_data>.
+
+        CATCH cx_salv_bs_sc_runtime_info.
+          MESSAGE `Unable to retrieve ALV data` TYPE 'E'.
+      ENDTRY.
+
+      cl_salv_bs_runtime_info=>clear_all( ).
+      MOVE-CORRESPONDING EXACT  <lt_data> TO it_final_amend.
+    ENDIF.
+    "end of fetch from another program
+
+    LOOP AT lt_po_data INTO DATA(wa_po_temp).
+      READ TABLE it_final_amend INTO DATA(wa_final_amend) WITH KEY ebeln = wa_po_temp-ebeln amend = wa_po_temp-amend.
+      wa_po_temp-amendby = wa_final_amend-name_text.
+      wa_po_temp-zamdate = wa_final_amend-zamdate.
+      wa_po_temp-basic = wa_final_amend-basic.
+      wa_po_temp-netpr = wa_final_amend-netpr.
+      MODIFY lt_po_data FROM wa_po_temp TRANSPORTING amendby  basic netpr zamdate.
+      CLEAR: wa_final_amend,wa_po_temp.
+    ENDLOOP.
+
+    "missing po changes by Ganesh-120480
+    DATA(lt_po_data_copy) =  lt_po_data.
+    IF p_a_dat_copy IS NOT INITIAL.
+      DELETE lt_po_data WHERE zamdate NOT IN p_a_dat_copy."<> lv_input_amend_date ." NOT IN p_a_dat."<> p_a_dat-low."
+    ENDIF.
+    LOOP AT lt_po_data_copy INTO DATA(wa_po_data_copy) WHERE zamdate IS INITIAL AND amend = '00'.
+      SELECT SINGLE aedat FROM zpoekko INTO @DATA(lv_created_date) WHERE ebeln = @wa_po_data_copy-ebeln AND amend = ' '.
+      wa_po_data_copy-zamdate = lv_created_date.
+      SELECT SINGLE ernam FROM zpoekko INTO @DATA(lv_created_by) WHERE ebeln = @wa_po_data_copy-ebeln AND amend = ' '.
+      SELECT SINGLE persnumber  FROM usr21 WHERE bname  = @lv_created_by INTO @DATA(lv_persnumber).
+      SELECT SINGLE name_text  FROM adrp WHERE persnumber = @lv_persnumber INTO @DATA(lv_name_text).
+      wa_po_data_copy-amendby = lv_name_text.
+
+      APPEND wa_po_data_copy  TO lt_po_data.
+      CLEAR : lv_created_by, lv_persnumber,lv_name_text.
+    ENDLOOP.
+*
+    IF lv_input_amend_date IS NOT INITIAL.
+      DELETE lt_po_data WHERE zamdate NOT IN p_a_dat_copy. "Ganesh-120480
+    ENDIF.
+    "eoc
+
+    CLEAR ls_po_data1.
+    LOOP AT lt_po_data INTO ls_po_data1.
+      SELECT SINGLE name1 name2 name3 name4 FROM lfa1
+        INTO ( lv_name1 , lv_name2 , lv_name3, lv_name4 )
+        WHERE lifnr = ls_po_data1-lifnr.
+      CONCATENATE lv_name1 lv_name2 lv_name3 lv_name4 INTO lv_final_name SEPARATED BY space.
+      ls_po_data1-vendor_name = lv_final_name.
+      MODIFY lt_po_data FROM ls_po_data1 TRANSPORTING vendor_name.
+      CLEAR : lv_name1,lv_name2,lv_name3,lv_name4,lv_final_name.
+    ENDLOOP.
+
+    CONCATENATE
+          'Company Code'
+          'Purchasing Document'
+          'Amendment No '
+          'PO Released Date'
+          'Created on '
+          'PO Amendment Date'
+          'Currency '
+          'Original Total Basic Price of PO'
+          'New Total Basic Price of PO'
+          'Release indicator '
+          'Amended by'
+          'PO Type'
+          'Vendor Code'
+          'Vendor Name'
+          'Exchange Rate'
+          INTO wa_final_ftp-str SEPARATED BY '|'.
+    APPEND wa_final_ftp TO it_final_ftp.
+    CLEAR : wa_final_ftp.
+    LOOP AT lt_po_data INTO DATA(wa_po_data).
+      CLEAR : lv_basic,lv_netpr,lv_waers,lv_bukrs,lv_aedat,lv_zamdate,lv_wkurs.
+      lv_basic = wa_po_data-basic.
+      lv_netpr = wa_po_data-netpr.
+      lv_waers = wa_po_data-waers.
+      lv_wkurs = wa_po_data-wkurs.
+      WRITE wa_po_data-aedat TO lv_aedat.
+      WRITE wa_po_data-zamdate TO lv_zamdate.
+      WRITE wa_po_data-zprint_date TO lv_zprdate.
+
+      CLEAR lv_data.
+
+      SELECT SINGLE bukrs
+        FROM ekko
+        INTO lv_bukrs
+      WHERE  ebeln = wa_po_data-ebeln.
+      CONCATENATE
+       lv_bukrs"wa_po_data-zbukrs
+       wa_po_data-ebeln
+       wa_po_data-amend
+       lv_zprdate
+       lv_aedat
+       lv_zamdate
+       wa_po_data-waers
+       lv_netpr
+       lv_basic
+       wa_po_data-frgke
+       wa_po_data-amendby
+       wa_po_data-bsart
+       wa_po_data-lifnr
+       wa_po_data-vendor_name
+       lv_wkurs
+       INTO wa_final_ftp-str SEPARATED BY '|'.
+
+      REPLACE ALL OCCURRENCES OF ','  IN  wa_final_ftp-str WITH space.
+      REPLACE ALL OCCURRENCES OF '"'  IN  wa_final_ftp-str WITH space.
+      CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+        EXPORTING
+          intext  = wa_final_ftp-str
+        IMPORTING
+          outtext = wa_final_ftp-str.
+
+      APPEND wa_final_ftp TO it_final_ftp.
+      CLEAR:wa_final_ftp,lv_bukrs.
+    ENDLOOP.
+
+    PERFORM ftp_transfer TABLES it_final_ftp USING filename_3.
+  ENDIF.
+
+
+FORM ftp_transfer TABLES it_final_ftp USING filename.
+
+  "ftp data fetch
+  SELECT SINGLE * FROM zltp_ftp
+  INTO @DATA(wa_ftp_data).
+
+
+  " FTP Communication Data Objects - [START]
+  DATA: pa_user  TYPE c LENGTH 90 , "   VALUE 'POTOSP', "FTP Server User
+        pa_pswrd TYPE c LENGTH 30 , "   VALUE 'Power$789', "FTP Server User's Password
+        pa_host  TYPE c LENGTH 64 , "   VALUE '10.7.44.111', "IP Address of the FTP Server
+        pa_rfcds TYPE rfcdes-rfcdest. " VALUE 'SAPFTPA'.  "RFC Destination,SAPFTP for Frontend communications(Local Connections)         .
+  pa_user = wa_ftp_data-zuser.
+  pa_pswrd = wa_ftp_data-zpass.
+  pa_host = wa_ftp_data-zhost.
+  pa_rfcds = wa_ftp_data-zdest.
+
+  DATA:
+    mi_key     TYPE i VALUE 26101957, "Hardcoded Handler Key,This is always '26101957'
+    mi_pwd_len TYPE i ,               "For finding the length of the Password,This is used when scrambling the password
+    mi_handle  TYPE i.                "Handle for Pointing to an already connected FTP connection,used for subsequent actions on the connected FTP session
+
+
+
+  "FTP Communication Data Objects - [END]
+  SET EXTENDED CHECK OFF.
+  mi_pwd_len = strlen( pa_pswrd ).
+  CALL FUNCTION 'HTTP_SCRAMBLE' "For Encrypting the Password
+    EXPORTING
+      source      = pa_pswrd
+      sourcelen   = mi_pwd_len
+      key         = mi_key
+    IMPORTING
+      destination = pa_pswrd.
+  CALL FUNCTION 'FTP_CONNECT' "For connecting to the FTP Server's user directory
+    EXPORTING
+      user            = pa_user
+      password        = pa_pswrd
+      host            = pa_host
+      rfc_destination = pa_rfcds "Using the Background SAP FTP Library as part of the SAP backend System
+    IMPORTING
+      handle          = mi_handle
+    EXCEPTIONS
+      not_connected   = 1
+      OTHERS          = 2.
+  IF sy-subrc = 0."When FTP connection established Successfully
+    WRITE:/ 'FTP connection established Successfully' COLOR COL_POSITIVE.
+
+    DATA : path(120) ."Path that points to the FTP User's Home Directory
+    DATA :  extension(4).
+    extension = '.csv' .
+    DATA : date(20).
+    DATA : datum TYPE sy-datum.
+
+    CLEAR date.
+    datum = sy-datum - 1."sneha-122059
+    "soc by Ganesh-121498
+    IF p_a_dat_cpy-low IS NOT INITIAL AND p_a_dat_cpy-high IS INITIAL.
+      CONCATENATE '/PO Status Report' '/' sy-sysid '/' 'PO_Amend_' p_a_dat_cpy-low extension INTO path .
+    ELSE.
+*      CONCATENATE '/PO Status Report' '/' sy-sysid '/' 'PO_Amend_Report' extension INTO path .
+      CONCATENATE '/PO Status Report' '/' sy-sysid '/' 'PODATA_VCP_' datum extension INTO path . "sneha -122059
+    ENDIF.
+    "eoc by Ganesh-121498
+    CALL FUNCTION 'FTP_R3_TO_SERVER' "For Creating a file from SAP R3 to FTP Server
+      EXPORTING
+        handle         = mi_handle
+        fname          = path
+        character_mode = 'X'
+      TABLES
+        text           = it_final_ftp "Final Internal table to be written to the text file in the FTP Server's Directory
+      EXCEPTIONS
+        tcpip_error    = 1
+        command_error  = 2
+        data_error     = 3
+        OTHERS         = 4.
+    IF sy-subrc EQ 0.
+      WRITE: / 'Data successfully upload in FTP server' COLOR COL_POSITIVE.
+************************************************ S.O.C. by Aj-10681688 *****************************************
+      LOOP AT it_final_ftp ASSIGNING FIELD-SYMBOL(<lv_amend>).
+        IF sy-tabix <> 1.
+          SPLIT <lv_amend> AT '|' INTO wa_po_amend-bukrs wa_po_amend-ebeln wa_po_amend-amend wa_po_amend-aedat
+                    wa_po_amend-zamdate wa_po_amend-waers wa_po_amend-netpr  wa_po_amend-basic wa_po_amend-frgke
+                    wa_po_amend-amendby wa_po_amend-bsart wa_po_amend-lifnr wa_po_amend-vendor_name
+                    wa_po_amend-wkurs wa_po_amend-zprint_date.
+          APPEND wa_po_amend TO it_po_amend.
+        ENDIF.
+      ENDLOOP.
+      UNASSIGN <lv_amend>.
+      CLEAR:wa_po_amend.
+      IF it_po_amend IS NOT INITIAL.
+        LOOP AT it_po_amend INTO wa_po_amend.
+          wa_po_amend-created_on = sy-datum.
+          wa_po_amend-created_at = sy-uzeit.
+          wa_po_amend-created_by = sy-uname.
+          MODIFY it_po_amend FROM wa_po_amend TRANSPORTING created_on created_at created_by.
+        ENDLOOP.
+        MODIFY zmm_po_amend_tab FROM TABLE it_po_amend.
+      ENDIF.
+************************************************ E.O.C. by Aj-10681688 *****************************************
+    ELSE.
+      WRITE: / 'Error in FTP Command' COLOR COL_NEGATIVE.
+************************************************ S.O.C. by Aj-10681688 *****************************************
+      LOOP AT it_final_ftp ASSIGNING <lv_amend>.
+        IF sy-tabix <> 1.
+          SPLIT <lv_amend> AT '|' INTO wa_po_amend-bukrs wa_po_amend-ebeln wa_po_amend-amend wa_po_amend-aedat
+                    wa_po_amend-zamdate wa_po_amend-waers wa_po_amend-netpr  wa_po_amend-basic wa_po_amend-frgke
+                    wa_po_amend-amendby wa_po_amend-bsart wa_po_amend-lifnr wa_po_amend-vendor_name
+                    wa_po_amend-zprint_date wa_po_amend-wkurs.
+          APPEND wa_po_amend TO it_po_amend.
+        ENDIF.
+      ENDLOOP.
+      UNASSIGN <lv_amend>.
+      CLEAR:wa_po_amend.
+      IF it_po_amend IS NOT INITIAL.
+        LOOP AT it_po_amend INTO wa_po_amend.
+          wa_po_amend-status = 'Error occurred while uploading the file'.
+          wa_po_amend-created_on = sy-datum.
+          wa_po_amend-created_at = sy-uzeit.
+          wa_po_amend-created_by = sy-uname.
+          MODIFY it_po_amend FROM wa_po_amend TRANSPORTING status created_on created_at created_by.
+        ENDLOOP.
+        MODIFY zmm_po_amend_tab FROM TABLE it_po_amend.
+      ENDIF.
+************************************************ E.O.C. by Aj-10681688 *****************************************
+    ENDIF.
+  ELSE."When FTP connection Fails
+    WRITE: / 'Error in FTP Command' COLOR COL_NEGATIVE.
+  ENDIF.
+  CALL FUNCTION 'FTP_DISCONNECT' "For Disconnecting the connected FTP Session
+    EXPORTING
+      handle = mi_handle
+    EXCEPTIONS
+      OTHERS = 1.
+
+  CLEAR: path.
+ENDFORM.
