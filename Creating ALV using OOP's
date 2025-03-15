@@ -1,0 +1,612 @@
+REPORT zmm_ses_derelease_or_delete.
+
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*& Created by  : Ganesh Kshathri - LTIMINDTREE                         *
+*& Requester   : Vaidehi Shah                                          *
+*& Changed on  : 20.02.2025                                            *
+*& Project     : 10921-01                                              *
+*& Ticket No   : 123103                                                *
+*& Workbenc Req: Developement -                                        *
+*& Description : Need system of de-release and delete ses              *
+*&---------------------------------------------------------------------*
+
+TABLES:ekko,essr.
+
+TYPES:BEGIN OF lty_final,
+        check,
+        lblni       TYPE essr-lblni,
+        ebeln       TYPE essr-ebeln,
+        ebelp       TYPE essr-ebelp,
+        frggr       TYPE essr-frggr,
+        frgsx       TYPE essr-frgsx,
+
+        frgc1       TYPE t16fs-frgc1,
+        frgc2       TYPE t16fs-frgc2,
+
+        frgct1(20)  TYPE c,
+        frgct2(20)  TYPE c,
+        msg1(100)   TYPE c,
+        msg2(100)   TYPE c,
+        delmsg(100) TYPE c,
+
+        cellstyle   TYPE lvc_t_styl,
+
+      END OF lty_final.
+
+TYPES:BEGIN OF lty_feedback,
+        zgatepassno  TYPE zmm_gatepasshdr-zgatepassno,
+        zgatepassstt TYPE zmm_gatepasshdr-zgatepassstt,
+        reason(40)   TYPE c,
+
+      END OF lty_feedback.
+
+DATA: it_final TYPE TABLE OF lty_final,
+      wa_final TYPE lty_final.
+DATA:lv_count TYPE i.
+
+DATA:it_feedback TYPE TABLE OF lty_feedback,
+     wa_feedback TYPE lty_feedback.
+DATA:wa_log TYPE zmm_ses_dr_lmtg.
+"alv Declarations for gatepass list
+
+DATA : i_fieldcat TYPE lvc_t_fcat.
+DATA : l_fieldcat TYPE lvc_s_fcat.
+
+DATA : g_container        TYPE scrfname VALUE 'CONT',
+       alv_grid           TYPE REF TO cl_gui_alv_grid,
+       g_custom_container TYPE REF TO cl_gui_custom_container.
+
+"alv declaration for feedback list.
+DATA : g_container1        TYPE scrfname VALUE 'CONT1',
+       alv_grid1           TYPE REF TO cl_gui_alv_grid,
+       g_custom_container1 TYPE REF TO cl_gui_custom_container.
+
+DATA : lt_exclude TYPE ui_functions.
+DATA : ls_exclude TYPE ui_func.
+DATA : wa_layout TYPE lvc_s_layo.
+
+"cellstyle
+DATA: gt_cellstyle TYPE lvc_t_styl,
+      gs_cellstyle TYPE lvc_s_styl.
+
+SELECTION-SCREEN: BEGIN OF BLOCK a1 WITH FRAME TITLE TEXT-001.
+  SELECT-OPTIONS : s_ebeln FOR essr-ebeln.
+  SELECT-OPTIONS : s_sesno FOR essr-lblni.
+  PARAMETERS : p_post_d type sy-datum DEFAULT sy-datum.
+  SELECTION-SCREEN SKIP 1.
+  PARAMETERS: p_chk AS CHECKBOX DEFAULT 'X'.
+SELECTION-SCREEN: END OF BLOCK a1.
+
+AT SELECTION-SCREEN.
+  IF s_ebeln IS INITIAL AND s_sesno IS INITIAL.
+    MESSAGE |PO Number or Entry Sheet Number is  Required| TYPE 'E'.
+  ENDIF.
+  SELECT lblni,ebeln,ebelp,essr~frggr,essr~frgsx,t16fs~frgc1,t16fs~frgc2
+    FROM essr
+    LEFT JOIN t16fs	ON t16fs~frggr = essr~frggr AND  t16fs~frgsx = essr~frgsx
+    INTO CORRESPONDING FIELDS OF TABLE @it_final
+    WHERE ebeln IN @s_ebeln
+          AND lblni IN @s_sesno.
+  IF sy-subrc = 0.
+    SELECT * FROM t16fd INTO TABLE @DATA(it_t16fd_d1) FOR ALL ENTRIES IN @it_final WHERE
+      frggr = @it_final-frggr AND frgco = @it_final-frgc1.
+    SELECT * FROM t16fd INTO TABLE @DATA(it_t16fd_d2) FOR ALL ENTRIES IN @it_final WHERE
+      frggr = @it_final-frggr AND frgco = @it_final-frgc2.
+
+    LOOP AT it_final INTO wa_final.
+      READ TABLE it_t16fd_d1 INTO DATA(wa_t16fd_d1) WITH KEY frggr = wa_final-frggr frgco = wa_final-frgc1.
+      IF sy-subrc = 0.
+        wa_final-frgct1 = wa_t16fd_d1-frgct.
+      ENDIF.
+      READ TABLE it_t16fd_d2 INTO DATA(wa_t16fd_d2) WITH KEY frggr = wa_final-frggr frgco = wa_final-frgc2.
+      IF sy-subrc = 0.
+        wa_final-frgct2 = wa_t16fd_d2-frgct.
+      ENDIF.
+
+
+      SELECT SINGLE * FROM zmm_ses_dr_lmtg INTO @DATA(wa_existing_log) WHERE lblni = @wa_final-lblni
+                                                                           AND ebeln = @wa_final-ebeln
+                                                                           AND ebelp = @wa_final-ebelp
+                                                                           AND frggr = @wa_final-frggr
+                                                                           AND frgsx = @wa_final-frgsx
+                                                                           AND frgc1 = @wa_final-frgc1
+                                                                           AND frgc2 = @wa_final-frgc2.
+      IF sy-subrc = 0.
+        wa_final-msg1 = wa_existing_log-msg1.
+        wa_final-msg2 = wa_existing_log-msg2.
+        wa_final-delmsg = wa_existing_log-delmsg.
+      ENDIF.
+      MODIFY it_final FROM wa_final TRANSPORTING frgct1 frgct2 msg1 msg2 delmsg.
+      CLEAR:wa_final.
+    ENDLOOP.
+  ENDIF.
+  IF it_final IS INITIAL.
+    MESSAGE 'No Data Found' TYPE 'E'.
+  ENDIF.
+
+
+
+START-OF-SELECTION.
+  IF it_final IS NOT INITIAL.
+    CALL SCREEN 100.
+  ENDIF.
+
+*&---------------------------------------------------------------------*
+*& Module STATUS_0100 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'PF_100'.
+  SET TITLEBAR 'TT_100'.
+
+  PERFORM prepare_fieldcatalog.
+  PERFORM check_box_selection.
+  PERFORM display_alv.
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+
+  CASE sy-ucomm.
+    WHEN 'BACK' OR 'EXIT' OR 'CANCEL'.
+      LEAVE TO SCREEN 0.
+      REFRESH:it_final.
+    WHEN 'CANCEL_REL'.
+      CLEAR:wa_final,lv_count.
+      LOOP AT it_final INTO wa_final WHERE check = 'X'.
+        lv_count = lv_count + 1.
+      ENDLOOP.
+      IF lv_count = 0.
+        MESSAGE |No Line Item Selected| TYPE 'S' DISPLAY LIKE 'E'.
+      ELSE.
+        DATA : it_return  TYPE TABLE OF bapireturn.
+        DATA:it_return1 TYPE TABLE OF bapireturn1.
+        DATA:wa_return1 TYPE bapireturn1.
+        DATA:it_return2 TYPE TABLE OF	bapireturn.
+        LOOP AT it_final INTO wa_final WHERE check = 'X'.
+          " Unblock the release strategy
+
+          " De-release the SES
+          " Define a variable to hold the custom posting date
+          DATA: custom_posting_date LIKE essr-budat.
+          " Set the custom posting date
+          custom_posting_date = p_post_d.
+          " Store the custom posting date in the user parameter 'SESPOSTINGDATE'
+          SET PARAMETER ID 'SESPOSTINGDATE' FIELD custom_posting_date.
+          REFRESH:it_return1.
+          IF  wa_final-frgc2 IS NOT INITIAL.
+            CALL FUNCTION 'BAPI_ENTRYSHEET_RESET_RELEASE'
+              EXPORTING
+                entrysheet = wa_final-lblni
+                rel_code   = wa_final-frgc2
+              TABLES
+                return     = it_return1.
+            CLEAR:wa_return1.
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = 'X'.
+            READ TABLE it_return1 INTO wa_return1 INDEX 1.
+            IF sy-subrc = 0.
+              REPLACE 'Not possible to cancel release with code' WITH 'Release Already Cancel for Code' INTO wa_return1-message.
+              wa_final-msg1 = wa_return1-message.
+              MODIFY it_final FROM wa_final TRANSPORTING msg1.
+              IF ( wa_return1-type = 'I' AND wa_return1-number = '108' AND wa_return1-id = 'SE' ) OR wa_return1-message CA 'Release Already Cancel for Code'.
+                MOVE-CORRESPONDING wa_final TO wa_log.
+                wa_log-changed_by = sy-uname.
+                wa_log-changed_on = sy-datum.
+                wa_log-changed_at = sy-uzeit.
+                MODIFY zmm_ses_dr_lmtg FROM wa_log.
+                COMMIT WORK.
+                CLEAR:wa_log.
+              ENDIF.
+            ENDIF.
+          ENDIF.
+          REFRESH:it_return1.
+          IF  wa_final-frgc1 IS NOT INITIAL.
+            CALL FUNCTION 'BAPI_ENTRYSHEET_RESET_RELEASE'
+              EXPORTING
+                entrysheet = wa_final-lblni
+                rel_code   = wa_final-frgc1
+              TABLES
+                return     = it_return1.
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = 'X'.
+            CLEAR:wa_return1.
+            READ TABLE it_return1 INTO wa_return1 INDEX 1.
+            IF sy-subrc = 0.
+              REPLACE 'Not possible to cancel release with code' WITH 'Release Already Cancel for Code' INTO wa_return1-message.
+              wa_final-msg2 = wa_return1-message.
+              MODIFY it_final FROM wa_final TRANSPORTING msg2.
+              IF ( wa_return1-type = 'I' AND wa_return1-number = '108'  AND wa_return1-id = 'SE') OR wa_return1-message CA 'Release Already Cancel for Code'.
+                MOVE-CORRESPONDING wa_final TO wa_log.
+                wa_log-changed_by = sy-uname.
+                wa_log-changed_on = sy-datum.
+                wa_log-changed_at = sy-uzeit.
+
+                MODIFY zmm_ses_dr_lmtg FROM wa_log.
+                COMMIT WORK.
+                CLEAR:wa_log.
+              ENDIF.
+            ENDIF.
+          ENDIF.
+
+          " Clear the custom posting date after the BAPI call
+          CLEAR custom_posting_date.
+          SET PARAMETER ID 'SESPOSTINGDATE' FIELD custom_posting_date.
+
+        ENDLOOP.
+      ENDIF.
+    WHEN 'DELETE_SES'.
+      CLEAR:wa_final,lv_count.
+      LOOP AT it_final INTO wa_final WHERE check = 'X'.
+        lv_count = lv_count + 1.
+      ENDLOOP.
+      IF lv_count = 0.
+        MESSAGE |No Line Item Selected| TYPE 'S' DISPLAY LIKE 'E'.
+      ELSE.
+        DATA:it_ret2 TYPE TABLE OF bapiret2.
+        DATA:wa_ret2 TYPE bapiret2.
+
+        LOOP AT it_final INTO wa_final WHERE check = 'X'.
+
+
+          " Set the custom posting date
+          custom_posting_date = sy-datum.
+          " Store the custom posting date in the user parameter 'SESPOSTINGDATE'
+          SET PARAMETER ID 'SESPOSTINGDATE' FIELD custom_posting_date.
+
+          CALL FUNCTION 'BAPI_ENTRYSHEET_DELETE'
+            EXPORTING
+              entrysheet = wa_final-lblni
+            TABLES
+              return     = it_ret2.
+          CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+            EXPORTING
+              wait = 'X'.
+
+          CLEAR:wa_ret2.
+          READ TABLE it_ret2 INTO wa_ret2 INDEX 1.
+          IF sy-subrc = 0.
+            wa_final-delmsg = wa_ret2-message.
+            MODIFY it_final FROM wa_final TRANSPORTING delmsg.
+            IF wa_ret2-type = 'I' AND wa_ret2-number = '110' AND wa_ret2-id = 'SE'.
+              MOVE-CORRESPONDING wa_final TO wa_log.
+              wa_log-changed_by = sy-uname.
+              wa_log-changed_on = sy-datum.
+              wa_log-changed_at = sy-uzeit.
+              MODIFY zmm_ses_dr_lmtg FROM wa_log.
+              COMMIT WORK.
+              CLEAR:wa_log.
+            ENDIF.
+          ENDIF.
+          " Clear the custom posting date after the BAPI call
+          CLEAR custom_posting_date.
+          SET PARAMETER ID 'SESPOSTINGDATE' FIELD custom_posting_date.
+
+        ENDLOOP.
+      ENDIF.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Form prepare_fieldcatalog
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM prepare_fieldcatalog .
+  REFRESH :i_fieldcat.
+  DATA :lv_pos TYPE i.
+  lv_pos = 1.
+  l_fieldcat-fieldname = 'CHECK'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'Select'.
+  l_fieldcat-checkbox = 'X'.
+  l_fieldcat-edit = 'X'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+
+  lv_pos = lv_pos + 1.
+  l_fieldcat-col_pos   = lv_pos.
+  l_fieldcat-fieldname = 'LBLNI'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'SES No'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  lv_pos = lv_pos + 1.
+  l_fieldcat-col_pos   = lv_pos.
+  l_fieldcat-fieldname = 'EBELN'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'PO No'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  lv_pos = lv_pos + 1.
+  l_fieldcat-col_pos   = lv_pos.
+  l_fieldcat-fieldname = 'EBELP'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'PO Line Item'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  lv_pos = lv_pos + 1.
+  l_fieldcat-col_pos   = lv_pos.
+  l_fieldcat-fieldname = 'FRGGR'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'SES Release Group'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  lv_pos = lv_pos + 1.
+  l_fieldcat-col_pos   = lv_pos.
+  l_fieldcat-fieldname = 'FRGSX'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'SES Release Strategy'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  lv_pos = lv_pos + 1.
+  l_fieldcat-col_pos   = lv_pos.
+  l_fieldcat-fieldname = 'FRGC1'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'SES Release Code'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  lv_pos = lv_pos + 1.
+  l_fieldcat-col_pos   = lv_pos.
+  l_fieldcat-fieldname = 'FRGC2'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'SES Release Code'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  lv_pos = lv_pos + 1.
+  l_fieldcat-col_pos   = lv_pos.
+  l_fieldcat-fieldname = 'FRGCT1'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'Release Code Description 1'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  lv_pos = lv_pos + 1.
+  l_fieldcat-col_pos   = lv_pos.
+  l_fieldcat-fieldname = 'FRGCT2'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'Release Code Description 2'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  lv_pos = lv_pos + 1.
+  l_fieldcat-col_pos   = lv_pos.
+  l_fieldcat-fieldname = 'MSG2'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'Message 1'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  lv_pos = lv_pos + 1.
+  l_fieldcat-col_pos   = lv_pos.
+  l_fieldcat-fieldname = 'MSG1'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'Message 2'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  lv_pos = lv_pos + 1.
+  l_fieldcat-col_pos   = lv_pos.
+  l_fieldcat-fieldname = 'DELMSG'.
+  l_fieldcat-tabname   = 'IT_FINAL'.
+  l_fieldcat-coltext   = 'Deletion Message'.
+  l_fieldcat-col_opt = 'X'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form display_alv
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM display_alv .
+  wa_layout-stylefname = 'CELLSTYLE'.
+  IF g_custom_container IS INITIAL.
+    CREATE OBJECT g_custom_container
+      EXPORTING
+        container_name = g_container.
+    CREATE OBJECT alv_grid
+      EXPORTING
+        i_parent = g_custom_container.
+*    PERFORM exclude_buttons.
+    CALL METHOD alv_grid->set_table_for_first_display
+      EXPORTING
+        is_layout       = wa_layout
+*       it_toolbar_excluding = lt_exclude
+      CHANGING
+        it_outtab       = it_final[]
+        it_fieldcatalog = i_fieldcat[].
+    CALL METHOD alv_grid->register_edit_event
+      EXPORTING
+        i_event_id = cl_gui_alv_grid=>mc_evt_modified.
+  ELSE.
+    CALL METHOD alv_grid->set_table_for_first_display
+      EXPORTING
+        is_layout       = wa_layout
+*       it_toolbar_excluding = lt_exclude
+      CHANGING
+        it_outtab       = it_final[]
+        it_fieldcatalog = i_fieldcat[].
+
+    CALL METHOD alv_grid->register_edit_event
+      EXPORTING
+        i_event_id = cl_gui_alv_grid=>mc_evt_modified.
+
+    CALL METHOD alv_grid->refresh_table_display.
+  ENDIF.
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Module STATUS_0200 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+*MODULE status_0200 OUTPUT.
+*  SET PF-STATUS 'PF_200'.
+*  SET TITLEBAR 'TT_200'.
+*  PERFORM prepare_feedback_fielcat.
+*  PERFORM display_feedback_alv.
+*ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*MODULE user_command_0200 INPUT.
+*  CASE sy-ucomm.
+*    WHEN 'BACK' OR 'CANCEL' OR 'EXIT'.
+*      REFRESH it_feedback.
+*      CLEAR:wa_feedback.
+*      LEAVE TO SCREEN 0.
+*    WHEN OTHERS.
+*  ENDCASE.
+*ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Form prepare_feedback_fielcat
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+*FORM prepare_feedback_fielcat .
+*  REFRESH :i_fieldcat.
+*  DATA :lv_pos TYPE i.
+*
+*  lv_pos = 1.
+*  l_fieldcat-col_pos   = lv_pos.
+*  l_fieldcat-fieldname = 'ZGATEPASSNO'.
+*  l_fieldcat-tabname   = 'IT_FEEDBACK'.
+*  l_fieldcat-coltext   = 'Gatepass No.'.
+*  l_fieldcat-col_opt = 'X'.
+*  APPEND l_fieldcat TO i_fieldcat.
+*  CLEAR l_fieldcat.
+*
+*  lv_pos = lv_pos + 1.
+*  l_fieldcat-col_pos   = lv_pos.
+*  l_fieldcat-fieldname = 'ZGATEPASSSTT'.
+*  l_fieldcat-tabname   = 'IT_FEEDBACK'.
+*  l_fieldcat-coltext   = 'Feedback'.
+*  l_fieldcat-col_opt = 'X'.
+*  APPEND l_fieldcat TO i_fieldcat.
+*  CLEAR l_fieldcat.
+*
+*
+*  lv_pos = lv_pos + 1.
+*  l_fieldcat-col_pos   = lv_pos.
+*  l_fieldcat-fieldname = 'REASON'.
+*  l_fieldcat-tabname   = 'IT_FEEDBACK'.
+*  l_fieldcat-coltext   = 'Reason'.
+*  l_fieldcat-col_opt = 'X'.
+*  APPEND l_fieldcat TO i_fieldcat.
+*  CLEAR l_fieldcat.
+*ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form display_feedback_alv
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+*FORM display_feedback_alv .
+*  IF g_custom_container1 IS INITIAL.
+*    CREATE OBJECT g_custom_container1
+*      EXPORTING
+*        container_name = g_container1.
+*    CREATE OBJECT alv_grid1
+*      EXPORTING
+*        i_parent = g_custom_container1.
+**    PERFORM exclude_buttons.
+*    CALL METHOD alv_grid1->set_table_for_first_display
+**      EXPORTING
+**        is_layout       = wa_layout
+**       it_toolbar_excluding = lt_exclude
+*      CHANGING
+*        it_outtab       = it_feedback[]
+*        it_fieldcatalog = i_fieldcat[].
+*    CALL METHOD alv_grid1->register_edit_event
+*      EXPORTING
+*        i_event_id = cl_gui_alv_grid=>mc_evt_modified.
+*  ELSE.
+*    CALL METHOD alv_grid1->set_table_for_first_display
+**      EXPORTING
+**        is_layout       = wa_layout
+**       it_toolbar_excluding = lt_exclude
+*      CHANGING
+*        it_outtab       = it_feedback[]
+*        it_fieldcatalog = i_fieldcat[].
+*
+*    CALL METHOD alv_grid1->register_edit_event
+*      EXPORTING
+*        i_event_id = cl_gui_alv_grid=>mc_evt_modified.
+*
+*    CALL METHOD alv_grid1->refresh_table_display.
+*  ENDIF.
+*ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form check_box_selection
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM check_box_selection .
+  CLEAR:wa_final.
+  LOOP AT it_final INTO wa_final.
+    REFRESH gt_cellstyle.
+    CLEAR:wa_final-cellstyle,gs_cellstyle.
+*    IF wa_final-zclosed = 'X'."our condition.
+*      gs_cellstyle-fieldname = 'CHECK'.
+*      gs_cellstyle-style = cl_gui_alv_grid=>mc_style_disabled.
+*      APPEND gs_cellstyle TO gt_cellstyle.
+*      wa_final-cellstyle[] = gt_cellstyle[].
+*      MODIFY it_final FROM wa_final TRANSPORTING cellstyle.
+*    ELSE.
+    IF p_chk = 'X'.
+      wa_final-check = 'X'.
+      MODIFY it_final FROM wa_final TRANSPORTING check.
+    ENDIF.
+*    ENDIF.
+    CLEAR:wa_final.
+  ENDLOOP.
+ENDFORM.
