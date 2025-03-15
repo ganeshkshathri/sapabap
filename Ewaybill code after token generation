@@ -1,0 +1,4812 @@
+*&------------------------------------------------------------------------*
+*& Report ZSD_EWAYBILL_EPC
+*&------------------------------------------------------------------------*
+*& Program : ZSD_EWAYBILL_EPC *
+*& Created by : Sneha Singh- LTIMINDTREE *
+*& Requester : Suraj Singh - LTIMINDTREE *
+*& Created on : 05.12.2024 *
+*& Project : 10912-01 *
+*& Ticket No : 122080*
+*& WIMS No : *
+*& Workbenc Req: Developement -SEDK984701,SEDK984788,SEDK984800,SEDK984880,
+*&                             SEDK984782
+*&-------------------------------------------------------------------------*
+REPORT zsd_ewaybill_epc.
+TABLES: vbrk,vbrp,bkpf.
+
+RANGES : r_ti FOR vbrk-zsgtxt.
+RANGES : r_te FOR vbrk-zsgtxt.
+RANGES : r_total FOR konv-kschl.
+RANGES : r_unit   FOR konv-kschl.
+RANGES : r_other  FOR konv-kschl.
+RANGES : r_othert FOR konv-kschl.
+
+DATA : wa_einv_token   TYPE zeinv_token.
+DATA : xstring         TYPE xstring.
+DATA : response        TYPE string.
+DATA : lv_body         TYPE string.
+DATA : lo_client       TYPE REF TO if_http_client.
+DATA : lv_url          TYPE string.
+DATA : lv_compid       TYPE string.
+DATA : ls_item         TYPE zeinv_create_irn_item.
+DATA : ls_item1        TYPE zeinv_create_irn_item.
+DATA : lt_item         TYPE STANDARD TABLE OF zeinv_create_irn_item.
+DATA : lt_item1        TYPE STANDARD TABLE OF zeinv_create_irn_item.
+DATA : ls_eway1         TYPE zeinv_create_irn_head.
+DATA : ls_eway         TYPE zeinv_create_irn_head.
+DATA : lt_eway          TYPE STANDARD TABLE OF zeinv_create_irn_head.
+DATA : lt_eway1         TYPE STANDARD TABLE OF zeinv_create_irn_head.
+DATA : ls_einv_master  TYPE zeinv_master.
+DATA : lt_einv_master  TYPE STANDARD TABLE OF zeinv_master.
+DATA : ls_einvmast     TYPE zeinv_master.
+DATA : ls_edit TYPE lvc_s_styl,
+       lt_edit TYPE lvc_t_styl.
+DATA : lv_name  TYPE thead-tdname,
+       is_vbelv TYPE vbfa-vbelv.
+DATA : it_lines TYPE STANDARD TABLE OF tline,
+       wa_lines TYPE tline.
+DATA: BEGIN OF node_wa,
+        node_type TYPE string,
+        prefix    TYPE string,
+        name      TYPE string,
+        nsuri     TYPE string,
+        value     TYPE string,
+        value_raw TYPE xstring,
+      END OF node_wa,
+      nodes LIKE TABLE OF node_wa.
+
+DATA : lv_kwert  TYPE konv-kwert.
+DATA : lv_kwert9 TYPE konv-kwert.
+DATA : lv_kwert0 TYPE konv-kwert.
+DATA : lv_oramt  TYPE konv-kwert.
+DATA : lv_discamt  TYPE konv-kwert.
+DATA : status TYPE string.
+DATA : message TYPE string.
+DATA : erronc(1).
+DATA : msg TYPE string.
+DATA : ackno TYPE string.
+DATA : ackdt TYPE string.
+DATA : acktm TYPE string.
+DATA : cncdt TYPE string.
+DATA : cnctm TYPE string.
+DATA : irn TYPE string.
+DATA : qrcode TYPE string.
+DATA : barcode TYPE string.
+DATA : sinvoice TYPE string.
+DATA : ewbno TYPE string.
+DATA : ewbdt TYPE string.
+DATA : ewbvalidtill TYPE string.
+DATA : id TYPE string.
+DATA : no TYPE string.
+DATA : type TYPE string.
+DATA : lv_count TYPE i.
+DATA : i_fieldcat  TYPE lvc_t_fcat.
+DATA : i_fieldcat1 TYPE lvc_t_fcat.
+DATA : lt_exclude  TYPE ui_functions.
+DATA : ls_exclude  TYPE ui_func.
+DATA : wa_layout   TYPE lvc_s_layo.
+
+DATA : g_container        TYPE scrfname VALUE 'GRID',
+       alv_grid           TYPE REF TO cl_gui_alv_grid,
+       g_custom_container TYPE REF TO cl_gui_custom_container.
+DATA : g_container1        TYPE scrfname VALUE 'GRID1',
+       alv_grid1           TYPE REF TO cl_gui_alv_grid,
+       g_custom_container1 TYPE REF TO cl_gui_custom_container.
+
+DATA : tdiff TYPE tvro-fahztd.
+DATA : tdiffc(20).
+TYPES : BEGIN OF ty_canc,
+          check(1),
+          remarks(100),
+          bukrs            TYPE zeinv_master-bukrs,
+          werks            TYPE zeinv_master-werks,
+          region           TYPE zeinv_master-region,
+          invoice_no       TYPE zeinv_master-invoice_no,
+          sap_doc          TYPE zeinv_master-sap_doc,
+          corr_sap_doc     TYPE zeinv_master-corr_sap_doc,
+          user_gstin       TYPE zeinv_master-user_gstin,
+          creation_date    TYPE zeinv_master-creation_date,
+          irn              TYPE zeinv_master-irn,
+          ackno            TYPE zeinv_master-ackno,
+          ackdt            TYPE zeinv_master-ackdt,
+          acktm            TYPE zeinv_master-acktm,
+          id               TYPE zeinv_master-id,
+          process_date     TYPE zeinv_master-process_date,
+          process_time     TYPE zeinv_master-process_time,
+          ewbno            TYPE zeinv_master-ewbno,
+          ewb_canc         TYPE zeinv_master-ewb_canc,
+          icon(1),
+          status(20),
+          message(200),
+          msg(200),
+          ewb_icon(1),
+          ewb_status(20),
+          ewb_message(200),
+          ewb_msg(200),
+          style            TYPE lvc_t_styl,
+        END OF ty_canc.
+DATA : lt_canc TYPE STANDARD TABLE OF ty_canc.
+DATA : g_container2        TYPE scrfname VALUE 'GRID2',
+       alv_grid2           TYPE REF TO cl_gui_alv_grid,
+       g_custom_container2 TYPE REF TO cl_gui_custom_container.
+DATA : i_fieldcat2 TYPE lvc_t_fcat.
+DATA : g_container3        TYPE scrfname VALUE 'GRID3',
+       alv_grid3           TYPE REF TO cl_gui_alv_grid,
+       g_custom_container3 TYPE REF TO cl_gui_custom_container.
+
+DATA : i_fieldcat3 TYPE lvc_t_fcat.
+DATA : lt_headdata TYPE STANDARD TABLE OF zeinv_head_data.
+DATA : ls_headdata TYPE zeinv_head_data.
+DATA : lt_itemdata TYPE STANDARD TABLE OF zeinv_item_data.
+DATA : ls_itemdata TYPE zeinv_item_data.
+DATA : lv_qty TYPE p DECIMALS 2.
+DATA : lv_amt TYPE p DECIMALS 2.
+DATA : lv_qtyc(10).
+DATA : ifc TYPE slis_t_fieldcat_alv,
+       xfc TYPE slis_fieldcat_alv.
+DATA : gv_ewbno TYPE zeinv_master-ewbno.
+SELECTION-SCREEN : BEGIN OF BLOCK a1 WITH FRAME TITLE TEXT-001.
+  SELECT-OPTIONS : s_ti FOR vbrk-zsgtxt MODIF ID m3.
+  SELECT-OPTIONS : s_werks FOR vbrp-werks MODIF ID m3.
+  SELECT-OPTIONS : s_budat FOR bkpf-budat MODIF ID m1.
+  SELECT-OPTIONS : s_budat1 FOR bkpf-budat MODIF ID m2.
+  SELECT-OPTIONS : s_ewbno  FOR gv_ewbno NO INTERVALS MODIF ID m4.
+  PARAMETERS : p_det AS CHECKBOX MODIF ID m4.
+  PARAMETERS : p_sum AS CHECKBOX MODIF ID m4.
+SELECTION-SCREEN : END OF BLOCK a1.
+
+SELECTION-SCREEN : BEGIN OF BLOCK a2 WITH FRAME TITLE TEXT-002.
+  PARAMETERS : p_crt RADIOBUTTON GROUP rad1 USER-COMMAND usc DEFAULT 'X'.
+  PARAMETERS : p_cnc RADIOBUTTON GROUP rad1.
+  PARAMETERS : p_rpt RADIOBUTTON GROUP rad1.
+  PARAMETERS : p_prt RADIOBUTTON GROUP rad1.
+SELECTION-SCREEN : END OF BLOCK a2.
+
+AT SELECTION-SCREEN OUTPUT.
+  LOOP AT SCREEN.
+    IF p_cnc = 'X'.
+      IF screen-group1 = 'M1' OR screen-group1 = 'M2' OR screen-group1 = 'M4'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDIF.
+
+    IF p_crt = 'X'.
+      IF screen-group1 = 'M2' OR screen-group1 = 'M4'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDIF.
+
+    IF p_prt = 'X'.
+      IF screen-group1 = 'M1' OR screen-group1 = 'M2' OR screen-group1 = 'M3'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ELSEIF  p_rpt EQ 'X'.
+      IF screen-group1 = 'M4'.
+        screen-active = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+
+AT SELECTION-SCREEN.
+  IF sy-ucomm = 'ONLI'.
+    IF p_crt = 'X'.
+      IF s_werks[] IS INITIAL.
+        MESSAGE : 'Please enter plant' TYPE 'E'.
+      ENDIF.
+      IF s_budat[] IS INITIAL.
+        MESSAGE : 'Please enter creation date' TYPE 'E'.
+      ENDIF.
+      SELECT SINGLE * FROM zeinv_master
+        INTO @DATA(wa_ewbno)
+        WHERE ewbno <> ''
+        AND invoice_no IN @s_ti.
+      IF sy-subrc EQ 0.
+        MESSAGE: 'EWAY bill already created' TYPE 'E'.
+      ENDIF.
+    ENDIF.
+
+    IF p_rpt = 'X'.
+      IF s_werks[] IS INITIAL.
+        MESSAGE : 'Please enter plant' TYPE 'E'.
+      ENDIF.
+    ENDIF.
+    IF s_werks[] IS NOT INITIAL.
+      SELECT werks FROM t001w
+     INTO TABLE @DATA(lt_plant)
+     WHERE werks IN @s_werks.
+
+      LOOP AT lt_plant INTO DATA(ls_plant).
+        AUTHORITY-CHECK OBJECT 'ZEINV_PLNT'
+        ID 'WERKS' FIELD ls_plant-werks.
+        IF sy-subrc <> 0.
+          MESSAGE : 'No authorization for plant' TYPE 'E'.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+
+  ENDIF.
+
+START-OF-SELECTION.
+  CLEAR : wa_layout.
+  IF p_crt = 'X'.
+    SELECT dates UP TO 1 ROWS INTO @DATA(lv_dates)   "ask about the activity date
+      FROM zmm_values WHERE txt = 'EINV_START'.
+    ENDSELECT.
+    IF sy-subrc = 0.
+      r_ti-sign = 'I'.
+      r_ti-option = 'CP'.
+      CONCATENATE '*' 'LTP' '*' 'TI' '*' INTO r_ti-low.
+      APPEND r_ti.
+      CLEAR : r_ti.
+
+      r_te-sign = 'I'.
+      r_te-option = 'CP'.
+      CONCATENATE '*' 'LTP' '*' 'TE' '*' INTO r_te-low.
+      APPEND r_te.
+      CLEAR : r_te.
+
+      PERFORM get_create_data.
+      IF lt_eway[] IS NOT INITIAL.
+        IF sy-batch IS INITIAL.
+          CALL SCREEN 100.
+        ENDIF.
+      ENDIF.
+    ELSE.
+      MESSAGE : 'Date not maintained in ZMM_VALUES table' TYPE 'E'.
+    ENDIF.
+  ELSEIF p_cnc = 'X'.
+    PERFORM get_cancewb_data.
+    " CH-001 ++
+*  ELSEIF p_rpt = 'X'.
+*    PERFORM get_rept_data.
+  ELSEIF p_prt = 'X'.
+    PERFORM get_ewbno_print.
+
+  ENDIF.
+*&---------------------------------------------------------------------*
+*& Module STATUS_0100 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'PF100'.
+  SET TITLEBAR 'TT_100'.
+  PERFORM build_fcat.
+  PERFORM display_alv.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  CASE sy-ucomm.
+    WHEN 'BACK' OR 'CANCEL' OR 'EXIT'.
+      LEAVE TO SCREEN 0.
+    WHEN 'EWAY'.          " Create  EWAY Bill
+      CALL METHOD alv_grid->check_changed_data.
+      LOOP AT lt_eway INTO ls_eway WHERE check = 'X'.
+        READ TABLE lt_einv_master INTO ls_einvmast WITH KEY invoice_no = ls_eway-no.
+        IF sy-subrc EQ 0 AND ls_einvmast-irn IS NOT INITIAL AND ls_einvmast-irn_canc IS INITIAL.
+          PERFORM get_eway.
+        ELSE.
+          MESSAGE 'IRN IS NOT CREATED' TYPE 'E'.
+        ENDIF.
+        CLEAR : ls_eway,ls_einvmast.
+      ENDLOOP.
+      IF lt_eway1[] IS NOT INITIAL.
+        CALL SCREEN 200.
+      ENDIF.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_0200 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_0200 OUTPUT.
+  SET PF-STATUS 'ST_200'.
+  SET TITLEBAR 'TT_200'.
+
+  PERFORM build_fcat1.
+  PERFORM display_alv1.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0200  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0200 INPUT.
+  CASE sy-ucomm.
+    WHEN 'BACK' OR 'CANCEL' OR 'EXIT'.
+      LEAVE TO TRANSACTION 'ZSD_EWAY_EPC'.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Form get_eway
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM get_eway .
+  CLEAR : wa_einv_token,lv_compid.
+  IF sy-sysid NE 'SEP'.
+    ls_eway-transmode = COND #(
+                            WHEN ls_eway-transmode = 'Road' OR ls_eway-transmode = 'ROAD' OR ls_eway-transmode = 'road'
+                              THEN '1'
+                            WHEN ls_eway-transmode = 'Rail' OR ls_eway-transmode = 'RAIL' OR ls_eway-transmode = 'rail'
+                              THEN '2'
+                            WHEN ls_eway-transmode = 'Air'  OR ls_eway-transmode = 'AIR' OR ls_eway-transmode = 'air'
+                              THEN '3'
+                            WHEN ls_eway-transmode = 'Ship' OR ls_eway-transmode = 'SHIP' OR ls_eway-transmode = 'ship'
+                              THEN '4'
+                             ).
+    ls_eway-subsplytyp = '1'.
+    ls_eway-doctype = 'INV'.
+    ls_eway-trntyp = '1'.
+    ls_eway-usergstin = '05AAAAU1183B5ZW'.
+    ls_eway-bgstin = '05AAAAR1077P1Z9'.
+  ELSE.
+    ls_eway-subsplytyp = COND char200(
+                              WHEN ls_eway-subsplytyp = 'Supply' OR ls_eway-subsplytyp = 'SUPPLY' OR ls_eway-subsplytyp = 'supply'
+                               THEN '1'
+                              WHEN ls_eway-subsplytyp = 'Import' OR ls_eway-subsplytyp = 'IMPORT' OR ls_eway-subsplytyp = 'import'
+                               THEN '2'
+                              WHEN ls_eway-subsplytyp = 'Export' OR ls_eway-subsplytyp = 'EXPORT' OR ls_eway-subsplytyp = 'export'
+                               THEN '3'
+                              WHEN ls_eway-subsplytyp = 'Job Work' THEN '4'
+                              WHEN ls_eway-subsplytyp = 'For Own Use' THEN '5'
+                              WHEN ls_eway-subsplytyp = 'Job work Returns' THEN '6'
+                              WHEN ls_eway-subsplytyp = 'Sales Return' THEN '7'
+                              WHEN ls_eway-subsplytyp = 'Others' THEN '8'
+                              WHEN ls_eway-subsplytyp = 'SKD/CKD' THEN '9'
+                              WHEN ls_eway-subsplytyp = 'Line Sales' THEN '10'
+                              WHEN ls_eway-subsplytyp = 'Recipient Not Known' THEN '11'
+                              WHEN ls_eway-subsplytyp = 'Exhibition or Fairs' THEN '12'
+                              ).
+    ls_eway-doctype = 'INV'. "HOW to classify other doctypes
+*BIL  Bill of Supply
+*BOE  Bill of Entry
+*CHL  Delivery Challan
+*OTH  Others
+
+    ls_eway-transmode = COND #(
+                            WHEN ls_eway-transmode = 'Road' OR ls_eway-transmode = 'ROAD' OR ls_eway-transmode = 'road'
+                              THEN '1'
+                            WHEN ls_eway-transmode = 'Rail' OR ls_eway-transmode = 'RAIL' OR ls_eway-transmode = 'rail'
+                              THEN '2'
+                            WHEN ls_eway-transmode = 'Air'  OR ls_eway-transmode = 'AIR' OR ls_eway-transmode = 'air'
+                              THEN '3'
+                            WHEN ls_eway-transmode = 'Ship' OR ls_eway-transmode = 'SHIP' OR ls_eway-transmode = 'ship'
+                              THEN '4'
+                             ).
+    ls_eway-trntyp = COND #(
+                            WHEN ls_eway-trntyp = 'REG' THEN '1'
+                            WHEN ls_eway-trntyp = 'SHP' THEN '2'    "Bill To - Ship To
+*                                    WHEN ls_eway-trntyp = 'REG' THEN '3'   "bill from ship from
+*                                    WHEN ls_eway-trntyp = 'REG' THEN '4'    Bill To - Ship To and Bill From - Dispatch From
+                            ).
+  ENDIF.
+  MOVE-CORRESPONDING ls_eway TO ls_eway1.
+  SELECT * FROM zeinv_token UP TO 1 ROWS
+    INTO wa_einv_token WHERE gstin = ls_eway-usergstin ORDER BY PRIMARY KEY.
+  ENDSELECT.
+  IF wa_einv_token-token IS INITIAL OR wa_einv_token-compid IS INITIAL.
+    ls_eway1-icon  = '1'.
+    ls_eway1-message1 = 'GSTIN Token/CompanyId details not found'.
+    ls_eway1-message2 = 'GSTIN Token/CompanyId details not found'.
+    APPEND ls_eway1 TO lt_eway1.
+    CLEAR : ls_eway1.
+  ELSE.
+    lv_compid = 4.
+    CONDENSE lv_compid.
+    IF sy-sysid = 'SEP'.
+      SELECT url UP TO 1 ROWS
+        FROM zeinv_url
+        INTO lv_url ORDER BY PRIMARY KEY. "BOC $LTIAUTO: #1
+      ENDSELECT.
+    ELSE.
+      lv_url = 'http://stage-api.irisgst.com'.
+    ENDIF.
+
+    IF lv_url IS INITIAL.
+      MESSAGE : 'URL not maintained. Please use Tcode ZEINV_API to maintain' TYPE 'E'.
+    ELSE.
+      "   CH-001 ++
+      IF ls_eway-subsplytyp IS NOT INITIAL AND (  ls_eway-transdist IS INITIAL OR ls_eway-vehtyp IS INITIAL OR " ls_eway-transid IS INITIAL OR
+         ls_eway-transmode IS INITIAL OR ls_eway-vehno IS INITIAL )." OR ls_eway-transdocdate IS INITIAL OR ls_eway-transdocno IS INITIAL OR ls_eway-transname IS INITIAL ).
+        MOVE-CORRESPONDING ls_eway TO   ls_eway1.
+        ls_eway1-icon  = '1'.
+        ls_eway1-message1 = 'E-way bill mandatory fields are not maintained'.
+        ls_eway1-message2 = 'E-way bill mandatory fields are not maintained'.
+        ls_eway1-id = id.
+        APPEND ls_eway1 TO lt_eway1.
+      ELSE.
+        "   CH-001 ++
+        CONCATENATE lv_url '/irisgst/topaz/api/v0.3/ewb' INTO lv_url.
+        CONDENSE lv_url.
+
+        cl_http_client=>create_by_url(
+          EXPORTING
+            url    = lv_url
+          IMPORTING
+            client = lo_client ).
+
+        IF lo_client IS BOUND.
+          CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+            EXPORTING
+              intext            = ls_eway-strdnm
+            IMPORTING
+              outtext           = ls_eway-strdnm
+            EXCEPTIONS
+              invalid_codepage  = 1
+              codepage_mismatch = 2
+              internal_error    = 3
+              cannot_convert    = 4
+              fields_not_type_c = 5
+              OTHERS            = 6.
+
+          CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+            EXPORTING
+              intext            = ls_eway-sbnm
+            IMPORTING
+              outtext           = ls_eway-sbnm
+            EXCEPTIONS
+              invalid_codepage  = 1
+              codepage_mismatch = 2
+              internal_error    = 3
+              cannot_convert    = 4
+              fields_not_type_c = 5
+              OTHERS            = 6.
+
+          CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+            EXPORTING
+              intext            = ls_eway-btrdnm
+            IMPORTING
+              outtext           = ls_eway-btrdnm
+            EXCEPTIONS
+              invalid_codepage  = 1
+              codepage_mismatch = 2
+              internal_error    = 3
+              cannot_convert    = 4
+              fields_not_type_c = 5
+              OTHERS            = 6.
+
+          CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+            EXPORTING
+              intext            = ls_eway-bbnm
+            IMPORTING
+              outtext           = ls_eway-bbnm
+            EXCEPTIONS
+              invalid_codepage  = 1
+              codepage_mismatch = 2
+              internal_error    = 3
+              cannot_convert    = 4
+              fields_not_type_c = 5
+              OTHERS            = 6.
+
+          CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+            EXPORTING
+              intext            = ls_eway-totrd_nm
+            IMPORTING
+              outtext           = ls_eway-totrd_nm
+            EXCEPTIONS
+              invalid_codepage  = 1
+              codepage_mismatch = 2
+              internal_error    = 3
+              cannot_convert    = 4
+              fields_not_type_c = 5
+              OTHERS            = 6.
+
+          CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+            EXPORTING
+              intext            = ls_eway-tobnm
+            IMPORTING
+              outtext           = ls_eway-tobnm
+            EXCEPTIONS
+              invalid_codepage  = 1
+              codepage_mismatch = 2
+              internal_error    = 3
+              cannot_convert    = 4
+              fields_not_type_c = 5
+              OTHERS            = 6.
+          REPLACE ALL OCCURRENCES OF '"' IN ls_eway-strdnm WITH space.
+          REPLACE ALL OCCURRENCES OF '"' IN ls_eway-sbnm WITH space.
+          REPLACE ALL OCCURRENCES OF '"' IN ls_eway-btrdnm WITH space.
+          REPLACE ALL OCCURRENCES OF '"' IN ls_eway-bbnm WITH space.
+          REPLACE ALL OCCURRENCES OF '"' IN ls_eway-totrd_nm WITH space.
+          REPLACE ALL OCCURRENCES OF '"' IN ls_eway-tobnm WITH space.
+
+          CONDENSE : ls_eway-totiamt,ls_eway-totinvval,ls_eway-totinvval,ls_eway-totothchrg,ls_eway-totsamt,ls_eway-tottxval,ls_eway-totcamt.
+          lv_amt = ls_eway-totiamt.
+          ls_eway-totiamt = lv_amt.
+          CLEAR : lv_amt.
+          lv_amt = ls_eway-totinvval.
+          ls_eway-totinvval = lv_amt.
+          CLEAR : lv_amt.
+          lv_amt = ls_eway-totothchrg.
+          ls_eway-totothchrg = lv_amt.
+          CLEAR : lv_amt.
+          lv_amt = ls_eway-totsamt.
+          ls_eway-totsamt = lv_amt.
+          CLEAR : lv_amt.
+          lv_amt = ls_eway-tottxval.
+          ls_eway-tottxval = lv_amt.
+          CLEAR : lv_amt.
+          lv_amt = ls_eway-totcamt.
+          ls_eway-totcamt = lv_amt.
+          CLEAR : lv_amt.
+          CONDENSE : ls_eway-totiamt,ls_eway-totinvval,ls_eway-totinvval,
+          ls_eway-totothchrg,ls_eway-totsamt,ls_eway-tottxval,ls_eway-totcamt.
+
+          CLEAR : ls_headdata.
+          MOVE-CORRESPONDING ls_eway TO ls_headdata.
+          ls_headdata-bbnm = ls_eway-bbnm.
+          ls_headdata-blglnm = ls_eway-btrdnm.
+          ls_headdata-dlglnm = ls_eway-dtrdnm.
+          ls_headdata-zno = ls_eway-no.
+          ls_headdata-slglnm = ls_eway-strdnm.
+          ls_headdata-tolglnm = ls_eway-totrd_nm.
+          ls_headdata-bukrs = ls_einvmast-bukrs.
+          ls_headdata-tino = ls_einvmast-invoice_no.
+          CONDENSE : ls_headdata-vbeln,ls_headdata-irn,ls_headdata-ackno,ls_headdata-ackdt,ls_headdata-catg,ls_headdata-bbnm,
+                     ls_headdata-bgstin,ls_headdata-bloc,ls_headdata-bpin,ls_headdata-bstcd,ls_headdata-btrdnm,ls_headdata-blglnm,
+                     ls_headdata-cntcd,ls_headdata-dgstin,ls_headdata-dloc,ls_headdata-doctype,ls_headdata-dpin,ls_headdata-dstcd,
+                     ls_headdata-dtrdnm,ls_headdata-dlglnm,ls_headdata-forcur,ls_headdata-invforcur,ls_headdata-zno,ls_headdata-ntr,
+                     ls_headdata-pos,ls_headdata-rchrg,ls_headdata-sbnm,ls_headdata-sgstin,ls_headdata-sloc,ls_headdata-spin,
+                     ls_headdata-sstcd,ls_headdata-strdnm,ls_headdata-slglnm,ls_headdata-togstin,ls_headdata-toloc,ls_headdata-topin,
+                     ls_headdata-tostcd,ls_headdata-totrd_nm,ls_headdata-tolglnm,ls_headdata-totcamt,ls_headdata-totiamt,ls_headdata-totinvval,
+                     ls_headdata-totothchrg,ls_headdata-totsamt,ls_headdata-tottxval,ls_headdata-trntyp,ls_headdata-usergstin,ls_eway-no,ls_headdata-bukrs,
+                     ls_headdata-tino.
+*                 need to use  ls_headdata-eway in place of ls_headdata-irn
+          DATA(lv_no) = ls_eway-no.
+          CONDENSE lv_no.
+          SHIFT lv_no LEFT DELETING LEADING '0'.
+          CONCATENATE ls_eway-dt+0(2) ls_eway-dt+3(2) ls_eway-dt+6(4) INTO DATA(docdate) SEPARATED BY '/'. "seq
+
+          CONCATENATE '{' '"supplyType":' '"O",' INTO lv_body. "this is fixed as outward
+          CONDENSE lv_body.
+          IF ls_eway-subsplytyp IS NOT INITIAL.
+            CONCATENATE lv_body '"subSupplyType":' '"' ls_eway-subsplytyp '"' ',' INTO lv_body.
+            CONDENSE lv_body.
+          ELSE.
+            CONCATENATE lv_body '"subSupplyType":' 'null,' INTO lv_body.
+            CONDENSE lv_body.
+          ENDIF.
+          CONCATENATE lv_body '"docType":' '"' ls_eway-doctype '"' ',' INTO lv_body."'"RI",' INTO lv_body.
+          CONDENSE lv_body.
+*          CONCATENATE lv_body '"docNo":' '"' ls_eway-vbeln '"' ',' INTO lv_body.
+          CONCATENATE lv_body '"docNo":' '"' ls_eway-no '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"invType":' '"' ls_eway-catg '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+
+          CONCATENATE lv_body '"docDate":'  '"'  docdate '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+
+          CONCATENATE lv_body '"transactionType":' '"' ls_eway-trntyp '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"referencInum":' 'null,' INTO lv_body.
+          CONDENSE lv_body.
+
+          CONCATENATE lv_body '"referencIdt":' 'null,' INTO lv_body.
+          CONDENSE lv_body.
+
+          CONCATENATE lv_body '"fromGstin":' '"' ls_eway-usergstin '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+
+          CONCATENATE lv_body '"fromTrdName":' '"' ls_eway-strdnm '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+
+          CONCATENATE lv_body '"dispatchFromGstin":' 'null,' INTO lv_body."thisss have to figure input for these and also the conditions when it will b passed
+*          CONCATENATE lv_body '"dispatchFromGstin":' '"' ls_eway-Sgstin '"' ',' INTO lv_body."thisss(pass a var if there is any chance to pass value for these fields)
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"dispatchFromTradeName":' 'null,' INTO lv_body."ask thisss
+*          CONCATENATE lv_body '"dispatchFromTradeName":' '"' ls_eway-strdnm '"' ',' INTO lv_body."ask thisss
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"fromAddr1":' '"' ls_eway-sbnm '"' ',' INTO lv_body. "addr also we have
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"fromAddr2":' '"' ls_eway-sloc '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"fromPlace":' '"' ls_eway-sloc '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"fromStateCode":' '"' ls_eway-sstcd '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"fromPincode":' '"' ls_eway-spin '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+
+          CONCATENATE lv_body '"toGstin":' '"' ls_eway-bgstin '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"toTrdName":' '"' ls_eway-btrdnm '"' ',' INTO lv_body."'null,' INTO lv_body.
+          CONDENSE lv_body.
+
+          CONCATENATE lv_body '"shipToGstin":'  'null,' INTO lv_body."'null,' INTO lv_body."same as dispatchfrom
+*           CONCATENATE lv_body '"shipToGstin":' '"' ls_eway-Bgstin '"' ',' INTO lv_body."'null,' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"ShipToTradeName":'  'null,' INTO lv_body."'null,' INTO lv_body.
+*          CONCATENATE lv_body '"ShipToTradeName":' '"' ls_eway-btrdnm '"' ',' INTO lv_body."'null,' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"toAddr1":' '"' ls_eway-bbnm '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"toAddr2":' '"'  ls_eway-bloc'"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"toPlace":' '"' ls_eway-bloc '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"toPincode":' '"' ls_eway-bpin '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"toStateCode":' '"' ls_eway-bstcd '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"totInvValue":' '"' ls_eway-totinvval '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"totalValue":' '"'ls_eway-tottxval  '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"cgstValue":' '0,' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"sgstValue":'  '0,' INTO lv_body.
+          CONDENSE lv_body.
+          CONDENSE ls_eway-totiamt.
+          CONCATENATE lv_body '"igstValue":' '"' ls_eway-totiamt '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"cessValue":' '"0",' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"cessNonAdvolValue":' '"0",' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"otherValue":' '"' ls_eway-totothchrg '"' ',' INTO lv_body."thissss
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"transMode":' '"' ls_eway-transmode '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+
+          CONCATENATE lv_body '"transDistance":' '"' ls_eway-transdist '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+
+          IF ls_eway-transdocdate IS NOT INITIAL.
+            REPLACE ALL OCCURRENCES OF '-' IN ls_eway-transdocdate WITH '/'.
+            CONCATENATE lv_body '"transDocDate":'  '"' ls_eway-transdocdate '"' ',' INTO lv_body.
+            CONDENSE lv_body.
+          ELSE.
+            CONCATENATE lv_body '"transDocDate":' 'null,' INTO lv_body.
+            CONDENSE lv_body.
+          ENDIF.
+          IF ls_eway-transdocno IS NOT INITIAL.
+            CONCATENATE lv_body '"transDocNo":'  '"'  ls_eway-transdocno '"' ','  INTO lv_body.
+            CONDENSE lv_body.
+          ELSE.
+            CONCATENATE lv_body '"transDocNo":' 'null,' INTO lv_body.
+            CONDENSE lv_body.
+          ENDIF.
+          IF ls_eway-transid IS NOT INITIAL.
+            CONCATENATE lv_body '"transporterId":' '"' ls_eway-transid '"' ',' INTO lv_body.
+            CONDENSE lv_body.
+          ELSE.
+            CONCATENATE lv_body '"transporterId":' 'null,' INTO lv_body.
+            CONDENSE lv_body.
+          ENDIF.
+
+          IF ls_eway-transname IS NOT INITIAL.
+            CONCATENATE lv_body '"transporterName":' '"' ls_eway-transname '"' ',' INTO lv_body.
+            CONDENSE lv_body.
+          ELSE.
+            CONCATENATE lv_body '"transporterName":' 'null,' INTO lv_body.
+            CONDENSE lv_body.
+          ENDIF.
+
+          IF ls_eway-subsplytyp IS NOT INITIAL.
+            CONCATENATE lv_body '"vehicleNo":' '"' ls_eway-vehno'"' ',' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"actFromStateCode":' '"' ls_eway-sstcd'"' ',' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"actToStateCode":' '"' ls_eway-bstcd'"'  ',' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"vehicleType":' '"' ls_eway-vehtyp'"' ',' INTO lv_body.
+            CONDENSE lv_body.
+          ELSE.
+            "   CH-001 ++
+            CONCATENATE lv_body '"vehicleNo":' 'null,' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"actFromStateCode":' 'null,' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"actToStateCode":' 'null,' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"vehicleType":' 'null,' INTO lv_body.
+            CONDENSE lv_body.
+          ENDIF.
+          CONCATENATE lv_body '"itemList": [' INTO lv_body.
+          CONDENSE lv_body.
+
+          DESCRIBE TABLE ls_eway-itemlist LINES DATA(lv_lines).
+          LOOP AT ls_eway-itemlist INTO ls_item.
+            DATA(lv_tabix1) = sy-tabix.
+            IF sy-tabix NE 1.
+              CONCATENATE lv_body ',' INTO lv_body.
+            ENDIF.
+
+            CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+              EXPORTING
+                intext            = ls_item-prdnm
+              IMPORTING
+                outtext           = ls_item-prdnm
+              EXCEPTIONS
+                invalid_codepage  = 1
+                codepage_mismatch = 2
+                internal_error    = 3
+                cannot_convert    = 4
+                fields_not_type_c = 5
+                OTHERS            = 6.
+
+            CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+              EXPORTING
+                intext            = ls_item-prddesc
+              IMPORTING
+                outtext           = ls_item-prddesc
+              EXCEPTIONS
+                invalid_codepage  = 1
+                codepage_mismatch = 2
+                internal_error    = 3
+                cannot_convert    = 4
+                fields_not_type_c = 5
+                OTHERS            = 6.
+
+            REPLACE ALL OCCURRENCES OF '"' IN ls_item-prdnm WITH space.
+            REPLACE ALL OCCURRENCES OF '"' IN ls_item-prddesc WITH space.
+
+            CONDENSE : ls_item-num,ls_item-qty,ls_item-camt,ls_item-samt,ls_item-iamt,ls_item-itmval,ls_item-sval,ls_item-txval,ls_item-unitprice.
+            lv_amt = ls_item-camt.
+            ls_item-camt =  lv_amt.
+            CLEAR : lv_amt.
+            lv_amt = ls_item-samt.
+            ls_item-samt =  lv_amt.
+            CLEAR : lv_amt.
+            lv_amt = ls_item-iamt.
+            ls_item-iamt =  lv_amt.
+            CLEAR : lv_amt.
+            lv_amt = ls_item-itmval.
+            ls_item-itmval =  lv_amt.
+            CLEAR : lv_amt.
+            lv_amt = ls_item-sval.
+            ls_item-sval =  lv_amt.
+            CLEAR : lv_amt.
+            lv_amt = ls_item-txval.
+            ls_item-txval =  lv_amt.
+            CLEAR : lv_amt.
+            lv_amt = ls_item-unitprice.
+            ls_item-unitprice =  lv_amt.
+            CLEAR : lv_amt.
+            CONDENSE : ls_item-num,ls_item-qty,ls_item-camt,ls_item-samt,ls_item-iamt,ls_item-itmval,ls_item-sval,ls_item-txval,ls_item-unitprice
+            ,ls_item-unit.
+
+            MOVE-CORRESPONDING ls_item TO ls_itemdata.
+            ls_itemdata-prddesc = ls_item-prdnm.
+            ls_itemdata-item = ls_item-num.
+            ls_itemdata-vbeln = ls_eway-vbeln.
+            ls_itemdata-bukrs = ls_einvmast-bukrs.
+            ls_itemdata-tino = ls_einvmast-invoice_no.
+            CONDENSE : ls_itemdata-vbeln,ls_itemdata-item,ls_itemdata-camt,ls_itemdata-samt,ls_itemdata-iamt,
+            ls_itemdata-crt,ls_itemdata-srt,ls_itemdata-irt,ls_itemdata-hsncd,ls_itemdata-itmval
+            ,ls_itemdata-othchrg,ls_itemdata-prddesc,ls_itemdata-prdnm,ls_itemdata-qty,ls_itemdata-sval,ls_itemdata-txval
+            ,ls_itemdata-unit,ls_itemdata-unitprice,ls_itemdata-bukrs,ls_itemdata-tino,ls_itemdata-disc.
+            APPEND ls_itemdata TO lt_itemdata.
+            CLEAR : ls_itemdata.
+            CONCATENATE lv_body '{' '"productName":' '"' ls_item-prdnm '"' ',' INTO lv_body."'"WHEAT AND MESLIN",' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"productDesc":' '"' ls_item-prdnm '"' ',' INTO lv_body."'"WHEAT AND MESLIN",' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"hsnCode":' '"' ls_item-hsncd '"' ',' INTO lv_body."'"1001",' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"quantity":' '"' ls_item-qty '"' ',' INTO lv_body."'"2",' INTO lv_body.
+            CONDENSE lv_body.
+
+            CONCATENATE lv_body '"qtyUnit":' '"' ls_item-unit '"' ',' INTO lv_body."'"2",' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"taxableAmount":' '"' ls_item-txval '"' ',' INTO lv_body."'"2",' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"sgstRate":' '"' ls_item-srt '"' ',' INTO lv_body."'"2",' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"cgstRate":' '"' ls_item-crt '"' ',' INTO lv_body."'"2",' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"igstRate":' '"' ls_item-irt '"' ',' INTO lv_body."'"2",' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"cessRate":' '"0"' ',' INTO lv_body."'"2",' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"cessNonAdvol":' '"0",' INTO lv_body."'"2",' INTO lv_body.
+            CONDENSE lv_body.
+            CONCATENATE lv_body '"txp":' 'null}' INTO lv_body.
+            CONDENSE lv_body.
+
+          ENDLOOP.
+          CLEAR : lv_tabix1,lv_lines.
+
+          CONCATENATE lv_body '],' '"companyId":'  'null,' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"userGstin":' '"' ls_eway-usergstin '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"forceDuplicateCheck": true }' INTO lv_body.
+          CONDENSE lv_body.
+
+          CONCATENATE '"' 'null' '"' INTO DATA(lv_null).
+          DATA(lv_null1) = 'null'.
+          REPLACE ALL OCCURRENCES OF lv_null IN lv_body WITH lv_null1.
+
+          lo_client->request->set_cdata( lv_body ).
+          lo_client->request->set_content_type( 'application/json' ).
+          lo_client->request->set_method( 'POST' ).
+          lo_client->request->set_header_field( name = 'companyId' value = lv_compid ).
+          lo_client->request->set_header_field( name = 'X-Auth-Token' value = wa_einv_token-token ).
+          lo_client->request->set_header_field( name = 'product' value = 'TOPAZ' ).
+          CALL METHOD lo_client->send
+            EXCEPTIONS
+              http_communication_failure = 1
+              http_invalid_state         = 2
+              http_processing_failed     = 3
+              OTHERS                     = 4.
+          WAIT UP TO 4 SECONDS.
+          CALL METHOD lo_client->receive
+            EXCEPTIONS
+              http_communication_failure = 1
+              http_invalid_state         = 2
+              http_processing_failed     = 3
+              OTHERS                     = 4.
+          response = lo_client->response->get_cdata( ).
+
+          CALL FUNCTION 'HR_KR_STRING_TO_XSTRING'
+            EXPORTING
+              unicode_string   = response
+            IMPORTING
+              xstring_stream   = xstring
+            EXCEPTIONS
+              invalid_codepage = 1.
+
+          DATA(reader) = cl_sxml_string_reader=>create( xstring ).
+          DATA(writer) = CAST if_sxml_writer( cl_sxml_string_writer=>create( ) ).
+          TRY.
+              DO.
+                CLEAR node_wa.
+                DATA(node) = reader->read_next_node( ).
+                IF node IS INITIAL.
+                  EXIT.
+                ENDIF.
+                writer->write_node( node ).
+                CASE node->type.
+                  WHEN if_sxml_node=>co_nt_element_open.
+                    DATA(open_element) = CAST if_sxml_open_element( node ).
+                    node_wa-node_type = `open element`.
+                    node_wa-prefix    = open_element->prefix.
+                    node_wa-name      = open_element->qname-name.
+                    node_wa-nsuri     = open_element->qname-namespace.
+                    DATA(attributes)  = open_element->get_attributes( ).
+                    APPEND node_wa TO nodes.
+                    LOOP AT attributes INTO DATA(attribute).
+                      node_wa-node_type = `attribute`.
+                      node_wa-prefix    = attribute->prefix.
+                      node_wa-name      = attribute->qname-name.
+                      node_wa-nsuri     = attribute->qname-namespace.
+                      IF attribute->value_type = if_sxml_value=>co_vt_text.
+                        node_wa-value = attribute->get_value( ).
+                      ELSEIF attribute->value_type =
+                                         if_sxml_value=>co_vt_raw.
+                        node_wa-value_raw = attribute->get_value_raw( ).
+                      ENDIF.
+                      APPEND node_wa TO nodes.
+                    ENDLOOP.
+                    CONTINUE.
+                  WHEN if_sxml_node=>co_nt_element_close.
+                    DATA(close_element) = CAST if_sxml_close_element( node ).
+                    node_wa-node_type   = `close element`.
+                    node_wa-prefix      = close_element->prefix.
+                    node_wa-name        = close_element->qname-name.
+                    node_wa-nsuri       = close_element->qname-namespace.
+                    APPEND node_wa TO nodes.
+                    CONTINUE.
+                  WHEN if_sxml_node=>co_nt_value.
+                    DATA(value_node) = CAST if_sxml_value_node( node ).
+                    node_wa-node_type   = `value`.
+                    IF value_node->value_type = if_sxml_value=>co_vt_text.
+                      node_wa-value = value_node->get_value( ).
+                    ELSEIF value_node->value_type = if_sxml_value=>co_vt_raw.
+                      node_wa-value_raw = value_node->get_value_raw( ).
+                    ENDIF.
+                    APPEND node_wa TO nodes.
+                    CONTINUE.
+                  WHEN OTHERS.
+                    node_wa-node_type   = `Error`.
+                    APPEND node_wa TO nodes.
+                    EXIT.
+                ENDCASE.
+              ENDDO.
+            CATCH cx_sxml_parse_error INTO DATA(parse_error).
+          ENDTRY.
+          "have to check the errors and find out how to store them discuss thiss
+*          link: https://developer.irisgst.com/topaz/index.html#/Ewaybill%20Core/post_irisgst_topaz_api_v0_3_ewb
+          LOOP AT nodes INTO node_wa WHERE node_type = 'attribute'.
+            DATA(lv_tabix) = sy-tabix.
+            IF node_wa-value = 'status'.
+              IF status IS INITIAL.
+                lv_tabix = lv_tabix + 1.
+                READ TABLE nodes INTO DATA(wa_node) INDEX lv_tabix.
+                status = wa_node-value.
+              ENDIF.
+            ELSEIF node_wa-value = 'message'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              IF message IS INITIAL.
+                message = wa_node-value.
+              ENDIF.
+            ELSEIF node_wa-value = 'msg'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              IF msg IS INITIAL.
+                msg = wa_node-value.
+              ENDIF.
+            ELSEIF node_wa-value = 'EwbNo' OR node_wa-value = 'Ewbno' OR node_wa-value = 'ewbno' OR node_wa-value = 'ewbNo'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              ewbno = wa_node-value.
+            ELSEIF node_wa-value = 'EwbDate' OR node_wa-value = 'EwbDate' OR node_wa-value = 'ewbdate' OR node_wa-value = 'ewbDate'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              ewbdt = wa_node-value.
+            ELSEIF node_wa-value = 'ValidUpto' OR node_wa-value = 'Validupto' OR node_wa-value = 'validupto' OR node_wa-value = 'validUpto'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              ewbvalidtill = wa_node-value.
+              "   CH-001 ++
+            ELSEIF node_wa-value = 'barcode' OR node_wa-value = 'Barcode' OR node_wa-value = 'BARCODE'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              barcode = wa_node-value.
+            ELSEIF node_wa-value = 'qrCode' OR node_wa-value = 'Qrcode' OR node_wa-value = 'QRCODE' OR node_wa-value = 'QRCode'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              qrcode = wa_node-value.
+            ELSEIF node_wa-value = 'id'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              id = wa_node-value.
+            ELSEIF node_wa-value = 'no'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              no = wa_node-value.
+            ELSEIF node_wa-value = 'type'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              type = wa_node-value.
+              IF type = 'error' OR type = 'Error'.
+                erronc = 'X'.
+              ELSE.
+                IF erronc IS INITIAL.
+                  CLEAR : message,msg,type.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+            CLEAR : lv_tabix,wa_node.
+          ENDLOOP.
+          CONDENSE : status,message,msg,ackdt,acktm,irn,qrcode,barcode,sinvoice,ackno,id,no,ewbno,ewbdt,ewbvalidtill.
+          " Instead of IRN it should be EWAY
+          CLEAR : erronc.
+          CONDENSE ls_eway-no.
+          UPDATE zeinv_master SET ewbno = ewbno ewbdt = ewbdt ewbvalidtill = ewbvalidtill ewb_qrcode = qrcode ewb_barcode = barcode
+                                  message1 = message message2 = msg process_date = sy-datum process_time = sy-uzeit
+                                  created_by = sy-uname
+                               WHERE invoice_no = ls_eway-no.
+          COMMIT WORK.
+          IF status EQ 'FAILURE'.
+            ls_eway1-icon = '1'.
+          ELSE.
+            ls_eway1-icon  = '3'.
+          ENDIF.
+        ELSE.
+          ls_eway1-icon  = '1'.
+        ENDIF.
+        ls_eway1-status = status.
+        ls_eway1-message1 = message.
+        ls_eway1-message2 = msg.
+        ls_eway1-id = id.
+        ls_eway1-ewbno = ewbno. "   CH-001 ++
+        APPEND ls_eway1 TO lt_eway1.
+
+        PERFORM txtid_updt USING ls_eway1.
+
+        CLEAR : lv_body,response,node_wa,nodes,status,message,msg,ackno,ackdt,acktm,irn,qrcode,barcode,sinvoice,id,no,ewbno,ewbdt,ewbvalidtill,
+        reader,writer,node,open_element,close_element,value_node,parse_error,xstring,ls_eway1.
+        " Instead of IRN it should be EWAY
+        REFRESH : nodes[],attributes[].
+
+        CALL METHOD lo_client->close
+          EXCEPTIONS
+            http_invalid_state = 1
+            OTHERS             = 2.
+
+        FREE lo_client.
+        CLEAR : lo_client.
+      ENDIF.
+    ENDIF.
+*    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  get_cancewb_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_cancewb_data .
+  SELECT * FROM zsd_einv_canc_ml
+    INTO TABLE @DATA(lt_auth)
+    WHERE werks IN @s_werks.
+
+  SELECT * FROM zeinv_master
+    INTO CORRESPONDING FIELDS OF TABLE lt_canc
+    WHERE invoice_no IN s_ti AND werks IN s_werks AND ewbno <> '' AND  ewb_canc = ' ' AND zmodule = 'SD'.
+  IF lt_canc[] IS NOT INITIAL.
+    SELECT * FROM vbrk INNER JOIN vbrp ON vbrk~vbeln = vbrp~vbeln "#EC CI_DB_OPERATION_OK[2768887] "BOC $LTIAUTO: #7 "#EC CI_DB_OPERATION_OK[2768887] "BOC $LTIAUTO: #7
+      INTO TABLE @DATA(lt_vbrk)
+      FOR ALL ENTRIES IN @lt_canc WHERE vbrk~zsgtxt = @lt_canc-invoice_no AND vbrk~fksto = ' ' AND vbrk~sfakn = ' '.
+    LOOP AT lt_canc INTO DATA(ls_canc).
+      READ TABLE lt_vbrk INTO DATA(ls_vbrk) WITH KEY vbrk-zsgtxt = ls_canc-invoice_no.
+      IF sy-subrc = 0.
+        IF ls_vbrk-vbrk-ernam = sy-uname.
+        ELSE.
+          READ TABLE lt_auth WITH KEY werks = ls_vbrk-vbrp-werks psno = sy-uname TRANSPORTING NO FIELDS.
+          IF sy-subrc <> 0.
+            DELETE lt_canc WHERE invoice_no = ls_canc-invoice_no.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+  IF lt_canc[] IS NOT INITIAL.
+    CALL SCREEN 300.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  CANCEL_EWB
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM cancel_ewb .
+  IF sy-sysid = 'SEP'.
+    SELECT url UP TO 1 ROWS
+      FROM zeinv_url
+INTO lv_url ORDER BY PRIMARY KEY. "BOC $LTIAUTO: #1
+    ENDSELECT.
+  ELSE.
+    lv_url = 'http://stage-api.irisgst.com'.
+  ENDIF.
+
+  IF lv_url IS INITIAL.
+    MESSAGE : 'URL not maintained. Please use Tcode ZEINV_API to maintain' TYPE 'E'.
+  ELSE.
+
+    CONCATENATE lv_url '​/irisgst​/onyx​/eway​/cancelEwb' INTO lv_url.
+    CONDENSE lv_url.
+
+*    cl_http_client=>create_by_url(
+*    exporting url = lv_url
+*    importing client = lo_client ).
+
+    IF lo_client IS BOUND.
+      LOOP AT lt_canc ASSIGNING FIELD-SYMBOL(<ls_canc1>) WHERE check = 'X'.
+        SELECT * FROM zeinv_token UP TO 1 ROWS
+          INTO wa_einv_token WHERE gstin = <ls_canc1>-user_gstin ORDER BY PRIMARY KEY.
+        ENDSELECT.
+        DATA(in) = 'X'.
+        IF wa_einv_token IS NOT INITIAL.
+          lv_compid = wa_einv_token-compid.
+          CONDENSE lv_compid.
+          CONDENSE <ls_canc1>-irn.            " Instead of IRN there should be ewayno.
+          CONCATENATE '{' '"ewbNo":' '"' <ls_canc1>-irn '"' ',' INTO lv_body. " Instead of IRN there should be ewayno.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"cnlRsn":' '"2"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"cnlRem":' '"' <ls_canc1>-remarks '"' ',' INTO lv_body.
+          CONDENSE lv_body.
+          CONCATENATE lv_body '"userGstin":' '"' <ls_canc1>-user_gstin '"' '}' INTO lv_body.
+          CONDENSE lv_body.
+
+          lo_client->request->set_cdata( lv_body ).
+          lo_client->request->set_content_type( 'application/json' ).
+          lo_client->request->set_method( 'PUT' ).
+          lo_client->request->set_header_field( name = 'companyId' value = lv_compid ).
+          lo_client->request->set_header_field( name = 'X-Auth-Token' value = wa_einv_token-token ).
+          lo_client->request->set_header_field( name = 'product' value = 'ONYX' ).
+          CALL METHOD lo_client->send
+            EXCEPTIONS
+              http_communication_failure = 1
+              http_invalid_state         = 2
+              http_processing_failed     = 3
+              OTHERS                     = 4.
+
+          CALL METHOD lo_client->receive
+            EXCEPTIONS
+              http_communication_failure = 1
+              http_invalid_state         = 2
+              http_processing_failed     = 3
+              OTHERS                     = 4.
+          response = lo_client->response->get_cdata( ).
+
+          CALL FUNCTION 'HR_KR_STRING_TO_XSTRING'
+            EXPORTING
+              unicode_string   = response
+            IMPORTING
+              xstring_stream   = xstring
+            EXCEPTIONS
+              invalid_codepage = 1.
+
+          DATA(reader) = cl_sxml_string_reader=>create( xstring ).
+          DATA(writer) = CAST if_sxml_writer( cl_sxml_string_writer=>create( ) ).
+          TRY.
+              DO.
+                CLEAR node_wa.
+                DATA(node) = reader->read_next_node( ).
+                IF node IS INITIAL.
+                  EXIT.
+                ENDIF.
+                writer->write_node( node ).
+                CASE node->type.
+                  WHEN if_sxml_node=>co_nt_element_open.
+                    DATA(open_element) = CAST if_sxml_open_element( node ).
+                    node_wa-node_type = `open element`.
+                    node_wa-prefix    = open_element->prefix.
+                    node_wa-name      = open_element->qname-name.
+                    node_wa-nsuri     = open_element->qname-namespace.
+                    DATA(attributes)  = open_element->get_attributes( ).
+                    APPEND node_wa TO nodes.
+                    LOOP AT attributes INTO DATA(attribute).
+                      node_wa-node_type = `attribute`.
+                      node_wa-prefix    = attribute->prefix.
+                      node_wa-name      = attribute->qname-name.
+                      node_wa-nsuri     = attribute->qname-namespace.
+                      IF attribute->value_type = if_sxml_value=>co_vt_text.
+                        node_wa-value = attribute->get_value( ).
+                      ELSEIF attribute->value_type =
+                                         if_sxml_value=>co_vt_raw.
+                        node_wa-value_raw = attribute->get_value_raw( ).
+                      ENDIF.
+                      APPEND node_wa TO nodes.
+                    ENDLOOP.
+                    CONTINUE.
+                  WHEN if_sxml_node=>co_nt_element_close.
+                    DATA(close_element) = CAST if_sxml_close_element( node ).
+                    node_wa-node_type   = `close element`.
+                    node_wa-prefix      = close_element->prefix.
+                    node_wa-name        = close_element->qname-name.
+                    node_wa-nsuri       = close_element->qname-namespace.
+                    APPEND node_wa TO nodes.
+                    CONTINUE.
+                  WHEN if_sxml_node=>co_nt_value.
+                    DATA(value_node) = CAST if_sxml_value_node( node ).
+                    node_wa-node_type   = `value`.
+                    IF value_node->value_type = if_sxml_value=>co_vt_text.
+                      node_wa-value = value_node->get_value( ).
+                    ELSEIF value_node->value_type = if_sxml_value=>co_vt_raw.
+                      node_wa-value_raw = value_node->get_value_raw( ).
+                    ENDIF.
+                    APPEND node_wa TO nodes.
+                    CONTINUE.
+                  WHEN OTHERS.
+                    node_wa-node_type   = `Error`.
+                    APPEND node_wa TO nodes.
+                    EXIT.
+                ENDCASE.
+              ENDDO.
+            CATCH cx_sxml_parse_error INTO DATA(parse_error).
+          ENDTRY.
+
+          LOOP AT nodes INTO node_wa WHERE node_type = 'attribute'.
+            DATA(lv_tabix) = sy-tabix.
+            IF node_wa-value = 'status'.
+              IF status IS INITIAL.
+                lv_tabix = lv_tabix + 1.
+                READ TABLE nodes INTO DATA(wa_node) INDEX lv_tabix.
+                status = wa_node-value.
+              ENDIF.
+            ELSEIF node_wa-value = 'message'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              message = wa_node-value.
+            ELSEIF node_wa-value = 'msg'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              msg = wa_node-value.
+            ELSEIF node_wa-value = 'cancelDate' OR node_wa-value = 'canceldate'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              SPLIT wa_node-value AT space INTO cncdt cnctm.
+            ELSEIF node_wa-value = 'ewbNo' OR node_wa-value = 'ewbno'.
+              lv_tabix = lv_tabix + 1.
+              READ TABLE nodes INTO wa_node INDEX lv_tabix.
+              ewbno = wa_node-value.
+            ENDIF.
+            CLEAR : lv_tabix,wa_node.
+          ENDLOOP.
+          CONDENSE : status,message,msg,cncdt,cnctm,irn.  " Instead of IRN there should be eway.
+
+          <ls_canc1>-status = status.
+          <ls_canc1>-message = message.
+          <ls_canc1>-msg = msg.
+*        <ls_canc1>-ewb_status = status.
+*        <ls_canc1>-ewb_message = message.
+*        <ls_canc1>-ewb_msg = msg.
+          IF status = 'SUCCESS'.
+            UPDATE zeinv_master SET ewb_canc = 'X'
+                                    ewb_canc_rem = <ls_canc1>-remarks
+                                    ewb_canc_date = sy-datum
+                                    ewb_canc_time = sy-uzeit
+                                    ewb_cncdt = cncdt
+                                    ewb_cnctm = cnctm
+                                    WHERE irn = <ls_canc1>-irn AND ewbno = <ls_canc1>-ewbno.
+            " Instead of IRN there should be eway.
+            COMMIT WORK.
+            <ls_canc1>-icon  = '3'.
+*          <ls_canc1>-ewb_icon  = '3'.
+
+            CLEAR : lv_body,response,node_wa,nodes,status,message,msg,cncdt,cnctm,irn,
+                    reader,writer,node,open_element,close_element,value_node,parse_error,xstring.
+            " Instead of IRN there should be ewayno.
+            REFRESH : nodes[],attributes[].
+          ELSE.
+            <ls_canc1>-icon  = '1'.
+*          <ls_canc1>-ewb_icon  = '1'.
+          ENDIF.
+        ELSE.
+          <ls_canc1>-status = 'Error'..
+          <ls_canc1>-message = 'Token not found for GSTIN'..
+          <ls_canc1>-msg = 'Token not found for GSTIN'..
+          <ls_canc1>-icon  = '1'.
+*        <ls_canc1>-ewb_status = 'Error'.
+*        <ls_canc1>-ewb_message = 'Token not found for GSTIN'.
+*        <ls_canc1>-ewb_msg = 'Token not found for GSTIN'.
+*        <ls_canc1>-ewb_icon  = '1'.
+        ENDIF.
+        CLEAR : lv_body,response,node_wa,nodes,status,message,msg,cncdt,cnctm,irn,
+        reader,writer,node,open_element,close_element,value_node,parse_error,xstring,wa_einv_token,lv_compid.
+        " Instead of IRN there should be eway.
+        REFRESH : nodes[],attributes[].
+      ENDLOOP.
+
+      IF in = 'X'.
+*        CALL SCREEN 400.
+      ENDIF.
+    ELSE.
+      MESSAGE : 'Cannot connect to API' TYPE 'I' DISPLAY LIKE 'E'.
+      LEAVE TO SCREEN 0.
+    ENDIF.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Module STATUS_0300 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_0300 OUTPUT.
+  SET PF-STATUS 'ST_300'.
+  SET TITLEBAR 'TT_300'.
+
+  PERFORM build_fcat2.
+  PERFORM display_alv2.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0300  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0300 INPUT.
+  CASE sy-ucomm.
+    WHEN 'BACK' OR 'CANC' OR 'EXIT'.
+      LEAVE TO SCREEN 0.
+    WHEN 'CANCEL'.
+      CALL METHOD alv_grid2->check_changed_data.
+      IF sy-sysid = 'SEP'.
+        SELECT url UP TO 1 ROWS
+          FROM zeinv_url
+INTO lv_url ORDER BY PRIMARY KEY. "BOC $LTIAUTO: #1
+        ENDSELECT.
+      ELSE.
+        lv_url = 'http://stage-api.irisgst.com'.
+      ENDIF.
+
+      IF lv_url IS INITIAL.
+        MESSAGE : 'URL not maintained. Please use Tcode ZEINV_API to maintain' TYPE 'E'.
+      ELSE.
+        CONCATENATE lv_url '/irisgst/onyx/irn/cancel' INTO lv_url.
+*        IF p_caneb EQ 'X'.                                        " CH-002
+*          CLEAR : lv_url.
+*          IF sy-sysid = 'SEP'.
+*            lv_url = 'https://api.irisgst.com/irisgst/onyx/irn/cancelEwb'.
+*          ELSE.
+*            lv_url = 'http://stage-api.irisgst.com/irisgst/onyx/irn/cancelEwb'.
+*          ENDIF.
+*        ENDIF.
+        CONDENSE lv_url.
+        cl_http_client=>create_by_url(
+          EXPORTING
+            url    = lv_url
+          IMPORTING
+            client = lo_client ).
+*
+        IF lo_client IS BOUND.
+          LOOP AT lt_canc ASSIGNING FIELD-SYMBOL(<ls_canc1>) WHERE check = 'X'.
+            SELECT * FROM zeinv_token UP TO 1 ROWS
+              INTO wa_einv_token WHERE gstin = <ls_canc1>-user_gstin ORDER BY PRIMARY KEY.
+            ENDSELECT.
+            DATA(in) = 'X'.
+            IF wa_einv_token IS NOT INITIAL.
+
+              IF p_cnc = 'X'.
+                lv_compid = wa_einv_token-compid.
+                CONDENSE lv_compid.
+                CONDENSE <ls_canc1>-irn.
+                CONCATENATE '{' '"irn":' '"' <ls_canc1>-irn '"' ',' INTO lv_body.
+                CONDENSE lv_body.
+                CONCATENATE lv_body '"cnlRsn":' '"1"' ',' INTO lv_body.
+                CONDENSE lv_body.
+                CONCATENATE lv_body '"cnlRem":' '"' <ls_canc1>-remarks '"' ',' INTO lv_body.
+                CONDENSE lv_body.
+                CONCATENATE lv_body '"userGstin":' '"' <ls_canc1>-user_gstin '"' '}' INTO lv_body.
+                CONDENSE lv_body.
+
+                lo_client->request->set_cdata( lv_body ).
+                lo_client->request->set_content_type( 'application/json' ).
+                lo_client->request->set_method( 'PUT' ).
+                lo_client->request->set_header_field( name = 'companyId' value = lv_compid ).
+                lo_client->request->set_header_field( name = 'X-Auth-Token' value = wa_einv_token-token ).
+                lo_client->request->set_header_field( name = 'product' value = 'ONYX' ).
+                CALL METHOD lo_client->send
+                  EXCEPTIONS
+                    http_communication_failure = 1
+                    http_invalid_state         = 2
+                    http_processing_failed     = 3
+                    OTHERS                     = 4.
+
+                CALL METHOD lo_client->receive
+                  EXCEPTIONS
+                    http_communication_failure = 1
+                    http_invalid_state         = 2
+                    http_processing_failed     = 3
+                    OTHERS                     = 4.
+                response = lo_client->response->get_cdata( ).
+
+                CALL FUNCTION 'HR_KR_STRING_TO_XSTRING'
+                  EXPORTING
+                    unicode_string   = response
+                  IMPORTING
+                    xstring_stream   = xstring
+                  EXCEPTIONS
+                    invalid_codepage = 1.
+
+                DATA(reader) = cl_sxml_string_reader=>create( xstring ).
+                DATA(writer) = CAST if_sxml_writer( cl_sxml_string_writer=>create( ) ).
+                TRY.
+                    DO.
+                      CLEAR node_wa.
+                      DATA(node) = reader->read_next_node( ).
+                      IF node IS INITIAL.
+                        EXIT.
+                      ENDIF.
+                      writer->write_node( node ).
+                      CASE node->type.
+                        WHEN if_sxml_node=>co_nt_element_open.
+                          DATA(open_element) = CAST if_sxml_open_element( node ).
+                          node_wa-node_type = `open element`.
+                          node_wa-prefix    = open_element->prefix.
+                          node_wa-name      = open_element->qname-name.
+                          node_wa-nsuri     = open_element->qname-namespace.
+                          DATA(attributes)  = open_element->get_attributes( ).
+                          APPEND node_wa TO nodes.
+                          LOOP AT attributes INTO DATA(attribute).
+                            node_wa-node_type = `attribute`.
+                            node_wa-prefix    = attribute->prefix.
+                            node_wa-name      = attribute->qname-name.
+                            node_wa-nsuri     = attribute->qname-namespace.
+                            IF attribute->value_type = if_sxml_value=>co_vt_text.
+                              node_wa-value = attribute->get_value( ).
+                            ELSEIF attribute->value_type =
+                                               if_sxml_value=>co_vt_raw.
+                              node_wa-value_raw = attribute->get_value_raw( ).
+                            ENDIF.
+                            APPEND node_wa TO nodes.
+                          ENDLOOP.
+                          CONTINUE.
+                        WHEN if_sxml_node=>co_nt_element_close.
+                          DATA(close_element) = CAST if_sxml_close_element( node ).
+                          node_wa-node_type   = `close element`.
+                          node_wa-prefix      = close_element->prefix.
+                          node_wa-name        = close_element->qname-name.
+                          node_wa-nsuri       = close_element->qname-namespace.
+                          APPEND node_wa TO nodes.
+                          CONTINUE.
+                        WHEN if_sxml_node=>co_nt_value.
+                          DATA(value_node) = CAST if_sxml_value_node( node ).
+                          node_wa-node_type   = `value`.
+                          IF value_node->value_type = if_sxml_value=>co_vt_text.
+                            node_wa-value = value_node->get_value( ).
+                          ELSEIF value_node->value_type = if_sxml_value=>co_vt_raw.
+                            node_wa-value_raw = value_node->get_value_raw( ).
+                          ENDIF.
+                          APPEND node_wa TO nodes.
+                          CONTINUE.
+                        WHEN OTHERS.
+                          node_wa-node_type   = `Error`.
+                          APPEND node_wa TO nodes.
+                          EXIT.
+                      ENDCASE.
+                    ENDDO.
+                  CATCH cx_sxml_parse_error INTO DATA(parse_error).
+                ENDTRY.
+
+                LOOP AT nodes INTO node_wa WHERE node_type = 'attribute'.
+                  DATA(lv_tabix) = sy-tabix.
+                  IF node_wa-value = 'status'.
+                    IF status IS INITIAL.
+                      lv_tabix = lv_tabix + 1.
+                      READ TABLE nodes INTO DATA(wa_node) INDEX lv_tabix.
+                      status = wa_node-value.
+                    ENDIF.
+                  ELSEIF node_wa-value = 'message'.
+                    lv_tabix = lv_tabix + 1.
+                    READ TABLE nodes INTO wa_node INDEX lv_tabix.
+                    message = wa_node-value.
+                  ELSEIF node_wa-value = 'msg'.
+                    lv_tabix = lv_tabix + 1.
+                    READ TABLE nodes INTO wa_node INDEX lv_tabix.
+                    msg = wa_node-value.
+                  ELSEIF node_wa-value = 'cancelDate' OR node_wa-value = 'canceldate'.
+                    lv_tabix = lv_tabix + 1.
+                    READ TABLE nodes INTO wa_node INDEX lv_tabix.
+                    SPLIT wa_node-value AT space INTO cncdt cnctm.
+                  ELSEIF node_wa-value = 'irn'.
+                    lv_tabix = lv_tabix + 1.
+                    READ TABLE nodes INTO wa_node INDEX lv_tabix.
+                    irn = wa_node-value.
+                  ENDIF.
+                  CLEAR : lv_tabix,wa_node.
+                ENDLOOP.
+                CONDENSE : status,message,msg,cncdt,cnctm,irn.
+
+                <ls_canc1>-status = status.
+                <ls_canc1>-message = message.
+                <ls_canc1>-msg = msg.
+                IF status = 'SUCCESS'.
+                  UPDATE zeinv_master SET irn_canc = 'X'
+                                          canc_rem = <ls_canc1>-remarks
+                                          canc_date = sy-datum
+                                          canc_time = sy-uzeit
+                                          cncdt = cncdt
+                                          cnctm = cnctm
+                                          WHERE irn = <ls_canc1>-irn.
+                  COMMIT WORK.
+                  <ls_canc1>-icon  = '3'.
+
+                  CLEAR : lv_body,response,node_wa,nodes,status,message,msg,cncdt,cnctm,irn,
+                          reader,writer,node,open_element,close_element,value_node,parse_error,xstring.
+                  REFRESH : nodes[],attributes[].
+
+
+                ELSE.
+                  <ls_canc1>-icon  = '1'.
+                ENDIF.
+*              ELSEIF p_caneb = 'X'.
+*                PERFORM cancel_ewb.
+              ENDIF.
+            ELSE.
+              <ls_canc1>-status = 'Error'.
+              <ls_canc1>-message = 'Token not found for GSTIN'.
+              <ls_canc1>-msg = 'Token not found for GSTIN'.
+              <ls_canc1>-icon  = '1'.
+            ENDIF.
+            CLEAR : lv_body,response,node_wa,nodes,status,message,msg,cncdt,cnctm,irn,
+            reader,writer,node,open_element,close_element,value_node,parse_error,xstring,wa_einv_token,lv_compid.
+            REFRESH : nodes[],attributes[].
+          ENDLOOP.
+
+          IF in = 'X'.
+            CALL SCREEN 400.
+          ENDIF.
+        ELSE.
+          MESSAGE : 'Cannot connect to API' TYPE 'I' DISPLAY LIKE 'E'.
+          LEAVE TO SCREEN 0.
+        ENDIF.
+      ENDIF.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Form get_create_data
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM get_create_data .
+  DATA : lv_qty   TYPE p DECIMALS 2.
+  DATA : lv_qty1  TYPE p DECIMALS 2.
+  DATA : lv_amt   TYPE p DECIMALS 2.
+  DATA : lv_posnr TYPE vbrp-posnr.
+  TYPES : BEGIN OF ty_tmp,
+            vbeln TYPE vbrk-vbeln,
+            posnr TYPE vbrp-posnr,
+          END OF ty_tmp.
+  DATA : lt_tmp TYPE STANDARD TABLE OF ty_tmp.
+  DATA : ls_tmp TYPE ty_tmp.
+
+  SELECT * FROM vbrp INNER JOIN vbrk ON vbrp~vbeln = vbrk~vbeln AND vbrk~fksto = ' ' AND vbrk~bukrs = '1000' "#EC CI_DB_OPERATION_OK[2768887] "BOC $LTIAUTO: #7 "#EC CI_DB_OPERATION_OK[2768887] "BOC $LTIAUTO: #7
+    INNER JOIN kna1 ON kna1~kunnr = vbrk~kunrg
+    INNER JOIN t001w ON t001w~werks = vbrp~werks
+    INNER JOIN j_1bbranch ON j_1bbranch~branch = t001w~j_1bbranch AND j_1bbranch~bukrs = vbrk~bukrs
+    INNER JOIN adrc AS p ON t001w~adrnr = p~addrnumber
+    INNER JOIN adrc AS c ON kna1~adrnr = c~addrnumber
+    INNER JOIN makt ON makt~matnr = vbrp~matnr
+    INNER JOIN marc ON marc~matnr = vbrp~matnr AND marc~werks = vbrp~werks
+    INTO TABLE @DATA(lt_vbrk)
+    WHERE vbrk~zsgtxt IN @s_ti AND vbrk~fkdat IN @s_budat AND vbrp~werks IN @s_werks" AND ( vbrk~zsgtxt IN @r_ti OR vbrk~zsgtxt IN @r_te )
+    AND vbrk~fkdat GE @lv_dates AND vbrk~fksto = ' ' AND vbrk~sfakn = ' '.
+
+  IF lt_vbrk[] IS NOT INITIAL.
+    SELECT FROM v_konv FIELDS * FOR ALL ENTRIES IN @lt_vbrk WHERE knumv = @lt_vbrk-vbrk-knumv INTO TABLE @DATA(lt_konv) .
+  ENDIF.
+
+  DATA(lt_vbrk2) = lt_vbrk[].
+  DATA(lt_vbrk1) = lt_vbrk[].
+  SORT lt_vbrk BY vbrk-vbeln.
+  DELETE ADJACENT DUPLICATES FROM lt_vbrk COMPARING vbrk-vbeln.
+
+  IF lt_vbrk[] IS NOT INITIAL.
+    SELECT invoice_no,irn_canc,ewbno,ewb_canc FROM zeinv_master INTO TABLE @DATA(lt_crtd)
+      FOR ALL ENTRIES IN @lt_vbrk WHERE invoice_no = @lt_vbrk-vbrk-zsgtxt.
+
+    SELECT a~vbeln,b~vbelv,c~del_no,c~ztrns_ctr,c~ztrans_name,c~zlr_no,c~zlr_date,c~veh_no,d~vbeln AS delno,d~traty,e~vtext
+      FROM vbrk AS a INNER JOIN vbfa AS b ON a~vbeln = b~vbeln
+      LEFT OUTER JOIN zsd_trns_dtl AS c ON b~vbelv = c~del_no
+      LEFT OUTER JOIN likp AS d ON d~vbeln = b~vbelv
+      LEFT OUTER JOIN tvtyt  AS e ON e~traty = d~traty AND spras = 'E'
+      FOR ALL ENTRIES IN @lt_vbrk
+      WHERE a~vbeln = @lt_vbrk-vbrk-vbeln AND b~vbtyp_v = 'J' INTO TABLE @DATA(it_vbfa).
+
+  ENDIF.
+
+  IF lt_vbrk[] IS NOT INITIAL.
+    SELECT * FROM zsd_bbu_bill
+      INTO TABLE @DATA(lt_bbu)
+      FOR ALL ENTRIES IN @lt_vbrk1
+      WHERE bill_no = @lt_vbrk1-vbrp-vbeln AND bill_item = @lt_vbrk1-vbrp-posnr.
+
+    SELECT * FROM vbpa INTO TABLE @DATA(lt_vbpa)
+      FOR ALL ENTRIES IN @lt_vbrk WHERE vbeln = @lt_vbrk-vbrk-vbeln AND ( parvw = 'WE' OR parvw = 'RE' ).
+    SORT lt_vbpa BY vbeln kunnr parvw.                "ad by akshay_D-118847
+    DELETE ADJACENT DUPLICATES FROM lt_vbpa COMPARING vbeln kunnr.
+    DATA(lt_vbpa1) = lt_vbpa[].
+    DELETE lt_vbpa1 WHERE parvw = 'RE'.
+    DATA(lt_vbpa2) = lt_vbpa[].
+    DELETE lt_vbpa2 WHERE parvw = 'WE'.
+    IF lt_vbpa1[] IS NOT INITIAL.
+      SELECT * FROM kna1
+       INTO TABLE @DATA(lt_shkna1)
+       FOR ALL ENTRIES IN @lt_vbpa1
+       WHERE kunnr = @lt_vbpa1-kunnr.
+
+      SELECT * FROM adrc
+        INTO TABLE @DATA(lt_shpadr)
+        FOR ALL ENTRIES IN @lt_shkna1
+        WHERE addrnumber = @lt_shkna1-adrnr.
+    ENDIF.
+
+    IF lt_vbpa2[] IS NOT INITIAL.
+      SELECT * FROM kna1
+       INTO TABLE @DATA(lt_shkna2)
+       FOR ALL ENTRIES IN @lt_vbpa2
+       WHERE kunnr = @lt_vbpa2-kunnr.
+
+      SELECT * FROM adrc
+        INTO TABLE @DATA(lt_shpadr1)
+        FOR ALL ENTRIES IN @lt_shkna2
+        WHERE addrnumber = @lt_shkna2-adrnr.
+    ENDIF.
+
+    SELECT * FROM j_1bbranch
+      INNER JOIN adrc ON adrc~addrnumber = j_1bbranch~adrnr
+      INTO TABLE @DATA(lt_branch)
+      FOR ALL ENTRIES IN @lt_vbrk WHERE j_1bbranch~branch = @lt_vbrk-t001w-j_1bbranch AND j_1bbranch~bukrs = '1000'.
+
+    SELECT * FROM t005u INTO TABLE @DATA(lt_t005u)
+      FOR ALL ENTRIES IN @lt_vbrk WHERE bland = @lt_vbrk-t001w-regio AND spras = 'E'.
+
+    SELECT * FROM t005u APPENDING TABLE lt_t005u
+      FOR ALL ENTRIES IN lt_vbrk WHERE bland = lt_vbrk-kna1-regio AND spras = 'E'.
+
+    SELECT * FROM t005u APPENDING TABLE lt_t005u
+      FOR ALL ENTRIES IN lt_shkna1 WHERE bland = lt_shkna1-regio AND spras = 'E'.
+
+    SELECT * FROM t005u APPENDING TABLE lt_t005u
+      FOR ALL ENTRIES IN lt_branch WHERE bland = lt_branch-adrc-region AND spras = 'E' AND land1 = 'IN'.
+
+    SELECT * FROM t005u APPENDING TABLE lt_t005u
+      FOR ALL ENTRIES IN lt_shkna2 WHERE bland = lt_shkna2-regio AND spras = 'E'.
+
+    SELECT * FROM tvgft INTO TABLE @DATA(lt_tvgft)
+      FOR ALL ENTRIES IN @lt_vbrk WHERE gform = @lt_vbrk-kna1-gform AND spras = 'E'.
+
+    SELECT * FROM t005t INTO TABLE @DATA(lt_t005t)
+      FOR ALL ENTRIES IN @lt_vbrk WHERE land1 = @lt_vbrk-kna1-land1 AND spras = 'E'.
+  ENDIF.
+
+  LOOP AT lt_vbrk INTO DATA(ls_vbrk).
+    READ TABLE lt_crtd INTO DATA(ls_crtd) WITH KEY invoice_no = ls_vbrk-vbrk-zsgtxt.
+    IF sy-subrc = 0.
+      IF ls_crtd-ewbno IS NOT INITIAL  .
+        IF  ls_crtd-ewbno IS NOT INITIAL AND  ls_crtd-ewb_canc IS INITIAL.
+          ls_edit-fieldname = 'CHECK'.
+          ls_edit-style = cl_gui_alv_grid=>mc_style_disabled.
+          ls_edit-style2 = space.
+          ls_edit-style3 = space.
+          ls_edit-style4 = space.
+          ls_edit-maxlen = 8.
+          INSERT ls_edit INTO TABLE lt_edit.
+          INSERT LINES OF lt_edit INTO TABLE ls_eway-style.
+          ls_eway-ostatus = 'EWB No. Created'.
+        ELSEIF  ls_crtd-ewbno IS NOT INITIAL AND  ls_crtd-ewb_canc IS NOT INITIAL.
+          ls_edit-fieldname = 'CHECK'.
+          ls_edit-style = cl_gui_alv_grid=>mc_style_disabled.
+          ls_edit-style2 = space.
+          ls_edit-style3 = space.
+          ls_edit-style4 = space.
+          ls_edit-maxlen = 8.
+          INSERT ls_edit INTO TABLE lt_edit.
+          INSERT LINES OF lt_edit INTO TABLE ls_eway-style.
+          ls_eway-ostatus = 'IRN Created but EWB No. is cancelled'.
+        ELSE.
+          ls_edit-fieldname = 'CHECK'.
+          ls_edit-style = cl_gui_alv_grid=>mc_style_disabled.
+          ls_edit-style2 = space.
+          ls_edit-style3 = space.
+          ls_edit-style4 = space.
+          ls_edit-maxlen = 8.
+          INSERT ls_edit INTO TABLE lt_edit.
+          INSERT LINES OF lt_edit INTO TABLE ls_eway-style.
+          ls_eway-ostatus = 'Ewaybill no. Created'.
+        ENDIF.
+      ELSE.
+        ls_eway-ostatus = 'Open'.
+      ENDIF.
+    ENDIF.
+    REFRESH : lt_edit[].
+    CLEAR : ls_edit.
+
+    SELECT * FROM
+      zeinv_sd_ctyp_ms INTO TABLE @DATA(lt_ctyp)
+      WHERE werks = @ls_vbrk-vbrp-werks AND fkart = @ls_vbrk-vbrk-fkart.
+
+    READ TABLE lt_t005u INTO DATA(ls_t005u) WITH KEY bland = ls_vbrk-t001w-regio land1 = ls_vbrk-t001w-land1.
+    READ TABLE lt_t005u INTO DATA(ls_t005u1) WITH KEY bland = ls_vbrk-kna1-regio land1 = ls_vbrk-kna1-land1.
+    READ TABLE lt_t005t INTO DATA(ls_t005t) WITH KEY land1 = ls_vbrk-kna1-land1.
+    READ TABLE lt_vbpa1 INTO DATA(ls_vbpa1) WITH KEY vbeln = ls_vbrk-vbrk-vbeln.
+    READ TABLE lt_shkna1 INTO DATA(ls_shkna1) WITH KEY kunnr = ls_vbpa1-kunnr.
+    READ TABLE lt_shpadr INTO DATA(ls_shpadr) WITH KEY addrnumber = ls_shkna1-adrnr.
+    READ TABLE lt_vbpa2 INTO DATA(ls_vbpa2) WITH KEY vbeln = ls_vbrk-vbrk-vbeln.
+    READ TABLE lt_shkna2 INTO DATA(ls_shkna2) WITH KEY kunnr = ls_vbpa2-kunnr.
+    READ TABLE lt_shpadr1 INTO DATA(ls_shpadr1) WITH KEY addrnumber = ls_shkna2-adrnr.
+    READ TABLE lt_t005u INTO DATA(ls_t005u2) WITH KEY bland = ls_shkna1-regio land1 = ls_shkna1-land1.
+    READ TABLE lt_t005u INTO DATA(ls_t005u9) WITH KEY bland = ls_shkna2-regio land1 = ls_shkna2-land1.
+    READ TABLE lt_tvgft INTO DATA(ls_tvgft) WITH KEY gform = ls_vbrk-kna1-gform.
+    READ TABLE lt_branch INTO DATA(ls_branch) WITH KEY j_1bbranch-branch = ls_vbrk-t001w-j_1bbranch.
+    READ TABLE lt_t005u INTO DATA(ls_t005u3) WITH KEY bland = ls_branch-adrc-region land1 = 'IN'.
+
+    IF ls_vbrk-vbrk-fkart = 'ZG2B'.
+      ls_eway-doctype = 'C'.
+    ELSEIF ls_vbrk-vbrk-fkart = 'ZDRB'.
+      ls_eway-doctype = 'D'.
+    ELSE.
+      ls_eway-doctype = 'RI'.
+    ENDIF.
+
+    ls_eway-taxsch = 'GST'.
+    ls_eway-catg = ls_tvgft-vtext."'B2B'.
+    LOOP AT lt_vbpa INTO DATA(ls_vbpa) WHERE vbeln = ls_vbrk-vbrk-vbeln.
+      lv_count = lv_count + 1.
+    ENDLOOP.
+    IF lv_count = 1.
+      ls_eway-trntyp = 'REG'.
+    ELSE.
+      ls_eway-trntyp = 'SHP'.
+    ENDIF.
+
+    ls_eway-no = ls_vbrk-vbrk-zsgtxt.
+    ls_eway-vbeln = ls_vbrk-vbrk-vbeln.
+    CONCATENATE ls_vbrk-vbrk-fkdat+6(2) ls_vbrk-vbrk-fkdat+4(2) ls_vbrk-vbrk-fkdat+0(4) INTO ls_eway-dt SEPARATED BY '-'.
+    ls_eway-rchrg = 'N'.
+
+** Supplier details.
+    ls_eway-sgstin = ls_vbrk-j_1bbranch-gstin.
+    ls_eway-strdnm = ls_vbrk-p-name1.
+    ls_eway-sloc   = ls_t005u-bezei.
+    ls_eway-sstcd  = ls_vbrk-t001w-regio.
+    CONCATENATE ls_vbrk-p-street ls_vbrk-p-str_suppl1 ls_vbrk-p-str_suppl2 INTO ls_eway-sbnm SEPARATED BY space.
+    IF ls_eway-sbnm IS INITIAL .
+      ls_eway-sbnm = ls_eway-strdnm.
+    ENDIF.
+    ls_eway-spin   = ls_vbrk-t001w-pstlz.
+    ls_eway-cntcd  = ls_vbrk-t001w-land1.
+    IF sy-sysid = 'SED' OR sy-sysid = 'SEQ'.
+      SELECT gstin UP TO 1 ROWS
+        FROM zeinv_gstin
+        INTO ls_eway-sgstin
+        WHERE zregio = ls_vbrk-t001w-regio.
+      ENDSELECT.
+    ENDIF.
+    ls_eway-usergstin = ls_eway-sgstin.
+*****************
+** Buyer details.
+    ls_eway-bgstin = ls_shkna2-stcd3.
+    ls_eway-btrdnm = ls_shpadr1-name1.
+    ls_eway-bloc   = ls_t005u9-bezei.
+    ls_eway-bstcd  = ls_shkna2-regio.
+    ls_eway-pos    = ls_shkna2-regio.
+    ls_eway-bpin   = ls_shkna2-pstlz.
+    CONCATENATE ls_shpadr1-street ls_shpadr1-str_suppl1 ls_shpadr1-str_suppl2 INTO ls_eway-bbnm SEPARATED BY space.
+    IF ls_eway-bbnm IS INITIAL .
+      ls_eway-bbnm = ls_eway-btrdnm.
+    ENDIF.
+    IF ls_eway-catg = 'EXWP' OR ls_eway-catg = 'EXWOP'." OR ls_eway-catg = 'SEWP' OR ls_eway-catg = 'SEWOP'.
+      ls_eway-pos    = '96'.
+      ls_eway-bstcd  = '96'.
+      ls_eway-bpin   = '999999'.
+      ls_eway-bgstin = 'URP'.
+      ls_eway-cntcd = ls_vbrk-vbrk-land1.                         "akshay_D-118403
+    ENDIF.
+
+*    ls_eway-bgstin = ls_vbrk-kna1-stcd3.
+*    ls_eway-btrdnm = ls_vbrk-c-name1.
+*    ls_eway-bloc   = ls_t005u1-bezei.
+*    ls_eway-bstcd  = ls_vbrk-kna1-regio.
+*    ls_eway-pos    = ls_vbrk-kna1-regio.
+*    ls_eway-bpin   = ls_vbrk-kna1-pstlz.
+*    CONCATENATE ls_vbrk-c-street ls_vbrk-c-str_suppl1 ls_vbrk-c-str_suppl2 INTO ls_eway-bbnm SEPARATED BY space.
+*    IF ls_eway-bbnm IS INITIAL .
+*      ls_eway-bbnm = ls_eway-btrdnm.
+*    ENDIF.
+*    IF ls_eway-catg = 'EXWP' OR ls_eway-catg = 'EXWOP'." OR ls_eway-catg = 'SEWP' OR ls_eway-catg = 'SEWOP'.
+*      ls_eway-bstcd = '96'.
+*      ls_eway-pos   = '96'.
+*      ls_eway-bpin  = '999999'.
+*      ls_eway-bgstin = 'URP'.
+*    ENDIF.
+*****************
+** Person Details
+    IF ls_eway-dgstin IS INITIAL.
+      ls_eway-dgstin = 'null'.
+    ENDIF.
+    IF ls_eway-dtrdnm IS INITIAL.
+      ls_eway-dtrdnm = 'null'.
+    ENDIF.
+    IF ls_eway-dloc IS INITIAL.
+      ls_eway-dloc = 'null'.
+    ENDIF.
+    IF ls_eway-dstcd IS INITIAL.
+      ls_eway-dstcd = 'null'.
+    ENDIF.
+    IF ls_eway-dpin IS INITIAL.
+      ls_eway-dpin = 'null'.
+    ENDIF.
+*****************
+** Shipping to Details
+    IF lv_count GT 1.
+      ls_eway-togstin = ls_shkna1-stcd3.
+      ls_eway-totrd_nm = ls_shpadr-name1.
+      ls_eway-toloc   = ls_t005u2-bezei.
+      ls_eway-tostcd  = ls_shkna1-regio.
+      ls_eway-topin   = ls_shkna1-pstlz.
+      CONCATENATE ls_shpadr-street ls_shpadr-str_suppl1 ls_shpadr-str_suppl2 INTO ls_eway-tobnm SEPARATED BY space.
+      IF ls_eway-tobnm IS INITIAL .
+        ls_eway-tobnm = ls_eway-totrd_nm.
+      ENDIF.
+      IF ls_eway-catg = 'EXWP' OR ls_eway-catg = 'EXWOP'." OR ls_eway-catg = 'SEWP' OR ls_eway-catg = 'SEWOP'.
+        ls_eway-tostcd = '96'.
+        ls_eway-topin  = '999999'.
+        ls_eway-togstin = 'URP'.
+      ENDIF.
+    ENDIF.
+
+    IF ls_eway-tobnm IS INITIAL.
+      ls_eway-tobnm = 'null'.
+    ENDIF.
+    IF ls_eway-togstin IS INITIAL.
+      ls_eway-togstin = 'null'.
+    ENDIF.
+    IF ls_eway-totrd_nm IS INITIAL.
+      ls_eway-totrd_nm = 'null'.
+    ENDIF.
+    IF ls_eway-toloc IS INITIAL.
+      ls_eway-toloc = 'null'.
+    ENDIF.
+    IF ls_eway-tostcd IS INITIAL.
+      ls_eway-tostcd = 'null'.
+    ENDIF.
+    IF ls_eway-topin IS INITIAL.
+      ls_eway-topin = 'null'.
+    ENDIF.
+*****************
+** Item Details
+    CLEAR : lv_count.
+    READ TABLE lt_ctyp INTO DATA(ls_ctyp) WITH KEY pltyp = 'IN'.
+    IF sy-subrc = 0.
+      lv_count = lv_count + 1.
+    ENDIF.
+    READ TABLE lt_ctyp INTO ls_ctyp WITH KEY pltyp = 'EX'.
+    IF sy-subrc = 0.
+      lv_count = lv_count + 1.
+    ENDIF.
+    READ TABLE lt_ctyp INTO ls_ctyp WITH KEY pltyp = ' '.
+    IF sy-subrc = 0.
+      lv_count = lv_count + 1.
+    ENDIF.
+    CLEAR : ls_ctyp.
+    IF lv_count = 1.
+      LOOP AT lt_ctyp INTO ls_ctyp WHERE werks = ls_vbrk-vbrp-werks AND fkart = ls_vbrk-vbrk-fkart
+      AND val_typ = 'TOTAL'.
+        r_total-sign = 'I'.
+        r_total-option = 'EQ'.
+        r_total-low = ls_ctyp-kschl.
+        APPEND r_total.
+        CLEAR : r_total.
+      ENDLOOP.
+
+      LOOP AT lt_ctyp INTO ls_ctyp WHERE werks = ls_vbrk-vbrp-werks AND fkart = ls_vbrk-vbrk-fkart
+      AND val_typ = 'UNIT'.
+        r_unit-sign = 'I'.
+        r_unit-option = 'EQ'.
+        r_unit-low = ls_ctyp-kschl.
+        APPEND r_unit.
+        CLEAR : r_unit.
+      ENDLOOP.
+
+      LOOP AT lt_ctyp INTO ls_ctyp WHERE werks = ls_vbrk-vbrp-werks AND fkart = ls_vbrk-vbrk-fkart
+      AND val_typ = 'OTHER'.
+        r_other-sign = 'I'.
+        r_other-option = 'EQ'.
+        r_other-low = ls_ctyp-kschl.
+        APPEND r_other.
+        CLEAR : r_other.
+      ENDLOOP.
+
+      LOOP AT lt_ctyp INTO ls_ctyp WHERE werks = ls_vbrk-vbrp-werks AND fkart = ls_vbrk-vbrk-fkart
+      AND val_typ = 'OTHERT'.
+        r_othert-sign = 'I'.
+        r_othert-option = 'EQ'.
+        r_othert-low = ls_ctyp-kschl.
+        APPEND r_othert.
+        CLEAR : r_othert.
+      ENDLOOP.
+    ELSE.
+      LOOP AT lt_ctyp INTO ls_ctyp WHERE werks = ls_vbrk-vbrp-werks AND fkart = ls_vbrk-vbrk-fkart AND pltyp = ls_vbrk-vbrk-pltyp
+      AND val_typ = 'TOTAL'.
+        r_total-sign = 'I'.
+        r_total-option = 'EQ'.
+        r_total-low = ls_ctyp-kschl.
+        APPEND r_total.
+        CLEAR : r_total.
+      ENDLOOP.
+
+      LOOP AT lt_ctyp INTO ls_ctyp WHERE werks = ls_vbrk-vbrp-werks AND fkart = ls_vbrk-vbrk-fkart AND pltyp = ls_vbrk-vbrk-pltyp
+      AND val_typ = 'UNIT'.
+        r_unit-sign = 'I'.
+        r_unit-option = 'EQ'.
+        r_unit-low = ls_ctyp-kschl.
+        APPEND r_unit.
+        CLEAR : r_unit.
+      ENDLOOP.
+
+      LOOP AT lt_ctyp INTO ls_ctyp WHERE werks = ls_vbrk-vbrp-werks AND fkart = ls_vbrk-vbrk-fkart AND pltyp = ls_vbrk-vbrk-pltyp
+      AND val_typ = 'OTHER'.
+        r_other-sign = 'I'.
+        r_other-option = 'EQ'.
+        r_other-low = ls_ctyp-kschl.
+        APPEND r_other.
+        CLEAR : r_other.
+      ENDLOOP.
+
+      LOOP AT lt_ctyp INTO ls_ctyp WHERE werks = ls_vbrk-vbrp-werks AND fkart = ls_vbrk-vbrk-fkart AND pltyp = ls_vbrk-vbrk-pltyp
+      AND val_typ = 'OTHERT'.
+        r_othert-sign = 'I'.
+        r_othert-option = 'EQ'.
+        r_othert-low = ls_ctyp-kschl.
+        APPEND r_othert.
+        CLEAR : r_othert.
+      ENDLOOP.
+    ENDIF.
+
+    CLEAR : ls_ctyp.
+    LOOP AT lt_vbrk1 INTO DATA(ls_vbrk9) WHERE vbrk-zsgtxt = ls_vbrk-vbrk-zsgtxt.
+      ls_tmp-vbeln = ls_vbrk9-vbrk-vbeln.
+      ls_tmp-posnr = ls_vbrk9-vbrp-posnr.
+      APPEND ls_tmp TO lt_tmp.
+      CLEAR : ls_tmp.
+    ENDLOOP.
+    SORT lt_tmp BY vbeln posnr DESCENDING.
+    READ TABLE lt_tmp INTO ls_tmp INDEX 1.
+    lv_posnr = ls_tmp-posnr.
+    CLEAR : ls_tmp.
+    REFRESH : lt_tmp[].
+
+    LOOP AT lt_vbrk1 INTO DATA(ls_vbrk1) WHERE vbrk-zsgtxt = ls_vbrk-vbrk-zsgtxt.
+      ls_item-no = ls_vbrk1-vbrk-zsgtxt.
+      ls_item-prdnm = ls_vbrk1-makt-maktx.
+      REPLACE ALL OCCURRENCES OF ',' IN ls_item-prdnm WITH space.
+      ls_item-hsncd = ls_vbrk1-marc-steuc.
+      lv_qty = ls_vbrk1-vbrp-fkimg.
+      ls_item-qty = lv_qty.
+      CONDENSE ls_vbrk1-vbrp-meins.
+      TRANSLATE ls_vbrk1-vbrp-meins TO UPPER CASE.
+      SELECT einvuom UP TO 1 ROWS
+        FROM zeinv_uom
+        INTO ls_item-unit WHERE sapuom = ls_vbrk1-vbrp-meins.
+      ENDSELECT.
+      CONDENSE ls_item-unit.
+      TRANSLATE ls_item-unit TO UPPER CASE.
+      ls_item-num = ls_vbrk1-vbrp-posnr.
+
+      IF ls_vbrk1-vbrk-waerk = 'INR'.
+        IF r_total[] IS NOT INITIAL.
+          READ TABLE lt_bbu INTO DATA(ls_bbu) WITH KEY bill_no = ls_vbrk1-vbrp-vbeln bill_item = ls_vbrk1-vbrp-posnr.
+          IF sy-subrc = 0.
+            IF ls_bbu-bill_value IS NOT INITIAL.
+              LOOP AT lt_konv INTO DATA(ls_konv) WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+                AND kschl IN r_total[].
+                IF ls_konv-kkurs IS INITIAL.
+                  ls_konv-kkurs = 1.
+                ENDIF.
+                IF ls_bbu-bbu_curr <> 'INR'.
+                  IF ls_bbu-bbu_curr = 'JPY' OR ls_bbu-bbu_curr_off = 'JPY'.            " CH-003
+                    ls_konv-kkurs = ls_konv-kkurs / 100.
+                  ENDIF.
+                  ls_item-sval     = ls_item-sval + ( ls_bbu-bill_value * ls_konv-kkurs ).
+                  ls_item-txval    = ls_item-txval + ( ls_bbu-bill_value * ls_konv-kkurs ).
+                  ls_item-itmval   = ls_item-itmval + ( ls_bbu-bill_value * ls_konv-kkurs ).
+                  ls_eway-tottxval  = ls_eway-tottxval + ( ls_bbu-bill_value * ls_konv-kkurs ).
+                  ls_eway-totinvval = ls_eway-totinvval + ( ls_bbu-bill_value * ls_konv-kkurs ).
+                ELSE.
+                  ls_item-sval     = ls_item-sval + ls_bbu-bill_value.
+                  ls_item-txval    = ls_item-txval + ls_bbu-bill_value.
+                  ls_item-itmval   = ls_item-itmval + ls_bbu-bill_value.
+                  ls_eway-tottxval  = ls_eway-tottxval + ls_bbu-bill_value.
+                  ls_eway-totinvval = ls_eway-totinvval + ls_bbu-bill_value.
+                ENDIF.
+                EXIT.
+              ENDLOOP.
+            ELSE.
+              IF ls_bbu-bill_val_off IS NOT INITIAL.
+                LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+                  AND kschl IN r_total[].
+                  IF ls_konv-kkurs IS INITIAL.
+                    ls_konv-kkurs = 1.
+                  ENDIF.
+                  IF ls_bbu-bbu_curr <> 'INR'.
+                    IF ls_bbu-bbu_curr = 'JPY' OR ls_bbu-bbu_curr_off = 'JPY'.        " CH-003
+                      ls_konv-kkurs = ls_konv-kkurs / 100.
+                    ENDIF.
+                    ls_item-sval     = ls_item-sval + ( ls_bbu-bill_val_off * ls_konv-kkurs ).
+                    ls_item-txval    = ls_item-txval + ( ls_bbu-bill_val_off * ls_konv-kkurs ).
+                    ls_item-itmval   = ls_item-itmval + ( ls_bbu-bill_val_off * ls_konv-kkurs ).
+                    ls_eway-tottxval  = ls_eway-tottxval + ( ls_bbu-bill_val_off * ls_konv-kkurs ).
+                    ls_eway-totinvval = ls_eway-totinvval + ( ls_bbu-bill_val_off * ls_konv-kkurs ).
+                  ELSE.
+                    ls_item-sval     = ls_item-sval + ls_bbu-bill_val_off.
+                    ls_item-txval    = ls_item-txval + ls_bbu-bill_val_off.
+                    ls_item-itmval   = ls_item-itmval + ls_bbu-bill_val_off.
+                    ls_eway-tottxval  = ls_eway-tottxval + ls_bbu-bill_val_off.
+                    ls_eway-totinvval = ls_eway-totinvval + ls_bbu-bill_val_off.
+                  ENDIF.
+                  EXIT.
+                ENDLOOP.
+              ELSE.
+                LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+                AND kschl IN r_total[].
+                  ls_item-sval = ls_item-sval + ls_konv-kwert.
+                  ls_item-txval = ls_item-txval + ls_konv-kwert.
+                  ls_item-itmval = ls_item-itmval + ls_konv-kwert.
+                  ls_eway-tottxval = ls_eway-tottxval + ls_konv-kwert.
+                  ls_eway-totinvval = ls_eway-totinvval + ls_konv-kwert.
+                ENDLOOP.
+              ENDIF.
+            ENDIF.
+          ELSE.
+            LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+            AND kschl IN r_total[].
+              ls_item-sval = ls_item-sval + ls_konv-kwert.
+              ls_item-txval = ls_item-txval + ls_konv-kwert.
+              ls_item-itmval = ls_item-itmval + ls_konv-kwert.
+              ls_eway-tottxval = ls_eway-tottxval + ls_konv-kwert.
+              ls_eway-totinvval = ls_eway-totinvval + ls_konv-kwert.
+            ENDLOOP.
+          ENDIF.
+        ENDIF.
+
+        IF r_other[] IS NOT INITIAL.
+          LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+          AND kschl IN r_other.
+            IF lv_count = 1.
+              READ TABLE lt_ctyp INTO ls_ctyp WITH KEY werks = ls_vbrk-vbrp-werks fkart = ls_vbrk-vbrk-fkart
+              val_typ = 'OTHER' kschl = ls_konv-kschl.
+              IF sy-subrc = 0 .
+                IF ls_ctyp-operator = '+'.
+                  IF ls_konv-kwert LT 0.
+                    ls_konv-kwert = ls_konv-kwert * -1.
+                  ENDIF.
+                  ls_item-othchrg = ls_item-othchrg + ls_konv-kwert.
+                  ls_item-itmval = ls_item-itmval + ls_konv-kwert.
+*                  ls_eway-totothchrg = ls_eway-totothchrg + ls_konv-kwert.
+                  ls_eway-totinvval = ls_eway-totinvval + ls_konv-kwert.
+                ELSEIF ls_ctyp-operator = '-'.
+                  IF ls_konv-kwert GT 0.
+                    ls_konv-kwert = ls_konv-kwert * -1.
+                  ENDIF.
+                  ls_item-disc = ls_item-disc - ls_konv-kwert.
+                  ls_item-txval = ls_item-txval + ls_konv-kwert.
+                  ls_item-itmval = ls_item-itmval + ls_konv-kwert.
+                  ls_eway-totinvval = ls_eway-totinvval + ls_konv-kwert.
+                ENDIF.
+              ENDIF.
+            ELSE.
+              READ TABLE lt_ctyp INTO ls_ctyp WITH KEY werks = ls_vbrk-vbrp-werks fkart = ls_vbrk-vbrk-fkart
+              val_typ = 'OTHER' kschl = ls_konv-kschl pltyp = ls_vbrk-vbrk-pltyp.
+              IF sy-subrc = 0 .
+                IF ls_ctyp-operator = '+'.
+                  IF ls_konv-kwert LT 0.
+                    ls_konv-kwert = ls_konv-kwert * -1.
+                  ENDIF.
+                  ls_item-othchrg = ls_item-othchrg + ls_konv-kwert.
+                  ls_item-itmval = ls_item-itmval + ls_konv-kwert.
+*                  ls_eway-totothchrg = ls_eway-totothchrg + ls_konv-kwert.
+                  ls_eway-totinvval = ls_eway-totinvval + ls_konv-kwert.
+                ELSEIF ls_ctyp-operator = '-'.
+                  IF ls_konv-kwert GT 0.
+                    ls_konv-kwert = ls_konv-kwert * -1.
+                  ENDIF.
+                  ls_item-disc = ls_item-disc - ls_konv-kwert.
+                  ls_item-txval = ls_item-txval + ls_konv-kwert.
+                  ls_item-itmval = ls_item-itmval + ls_konv-kwert.
+                  ls_eway-totinvval = ls_eway-totinvval + ls_konv-kwert.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+            CLEAR : ls_ctyp.
+          ENDLOOP.
+        ENDIF.
+
+        IF r_othert[] IS NOT INITIAL.
+          lv_posnr = lv_posnr + 1.
+          LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+          AND kschl IN r_othert.
+            IF lv_count = 1.
+              READ TABLE lt_ctyp INTO ls_ctyp WITH KEY werks = ls_vbrk-vbrp-werks fkart = ls_vbrk-vbrk-fkart
+              val_typ = 'OTHERT' kschl = ls_konv-kschl.
+              IF sy-subrc = 0.
+                IF ls_konv-kwert LT 0.
+                  ls_konv-kwert = ls_konv-kwert * -1.
+                  ls_item-disc = ls_item-disc + ls_konv-kwert.
+                  ls_item-txval = ls_item-txval - ls_konv-kwert.
+                  ls_item-itmval = ls_item-itmval - ls_konv-kwert.
+                  ls_eway-tottxval = ls_eway-tottxval - ls_konv-kwert.
+                  ls_eway-totinvval = ls_eway-totinvval - ls_konv-kwert.
+                ELSE.
+                  IF ls_konv-kwert IS NOT INITIAL.
+                    DATA(frt) = 'X'.
+                    ls_item1-no = ls_vbrk1-vbrk-zsgtxt.
+                    IF ls_konv-kschl = 'BOCW'.
+                      ls_item1-prdnm = 'BOCW'.
+                    ELSE.
+                      ls_item1-prdnm = 'FREIGHT'.
+                    ENDIF.
+                    ls_item1-hsncd = ls_vbrk1-marc-steuc.
+                    lv_qty1 = 1.
+                    ls_item1-qty = lv_qty1.
+                    CONDENSE ls_vbrk1-vbrp-meins.
+                    TRANSLATE ls_vbrk1-vbrp-meins TO UPPER CASE.
+                    SELECT einvuom UP TO 1 ROWS
+                      FROM zeinv_uom
+                      INTO ls_item1-unit WHERE sapuom = ls_vbrk1-vbrp-meins.
+                    ENDSELECT.
+                    CONDENSE ls_item1-unit.
+                    TRANSLATE ls_item1-unit TO UPPER CASE.
+                    ls_item1-num = lv_posnr.
+                    ls_item1-sval = ls_item1-sval + ls_konv-kwert.
+                    ls_item1-txval = ls_item1-txval + ls_konv-kwert.
+                    ls_item1-itmval = ls_item1-itmval + ls_konv-kwert.
+                    ls_item1-unitprice = ls_item1-unitprice + ls_konv-kwert.
+                    ls_eway-tottxval = ls_eway-tottxval + ls_konv-kwert.
+                    ls_eway-totinvval = ls_eway-totinvval + ls_konv-kwert.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+            ELSE.
+              READ TABLE lt_ctyp INTO ls_ctyp WITH KEY werks = ls_vbrk-vbrp-werks fkart = ls_vbrk-vbrk-fkart
+              val_typ = 'OTHERT' kschl = ls_konv-kschl pltyp = ls_vbrk-vbrk-pltyp.
+              IF sy-subrc = 0.
+                IF ls_konv-kwert LT 0.
+                  ls_konv-kwert = ls_konv-kwert * -1.
+                  ls_item-disc = ls_item-disc + ls_konv-kwert.
+                  ls_item-txval = ls_item-txval - ls_konv-kwert.
+                  ls_item-itmval = ls_item-itmval - ls_konv-kwert.
+                  ls_eway-tottxval = ls_eway-tottxval - ls_konv-kwert.
+                  ls_eway-totinvval = ls_eway-totinvval - ls_konv-kwert.
+                ELSE.
+                  IF ls_konv-kwert IS NOT INITIAL.
+                    frt = 'X'.
+                    ls_item1-no = ls_vbrk1-vbrk-zsgtxt.
+                    IF ls_konv-kschl = 'BOCW'.
+                      ls_item1-prdnm = 'BOCW'.
+                    ELSE.
+                      ls_item1-prdnm = 'FREIGHT'.
+                    ENDIF.
+                    ls_item1-hsncd = ls_vbrk1-marc-steuc.
+                    lv_qty1 = 1.
+                    ls_item1-qty = lv_qty1.
+                    CONDENSE ls_vbrk1-vbrp-meins.
+                    TRANSLATE ls_vbrk1-vbrp-meins TO UPPER CASE.
+                    SELECT einvuom UP TO 1 ROWS
+                      FROM zeinv_uom
+                      INTO ls_item1-unit WHERE sapuom = ls_vbrk1-vbrp-meins.
+                    ENDSELECT.
+                    CONDENSE ls_item1-unit.
+                    TRANSLATE ls_item1-unit TO UPPER CASE.
+                    ls_item1-num = lv_posnr.
+                    ls_item1-sval = ls_item1-sval + ls_konv-kwert.
+                    ls_item1-txval = ls_item1-txval + ls_konv-kwert.
+                    ls_item1-itmval = ls_item1-itmval + ls_konv-kwert.
+                    ls_item1-unitprice = ls_item1-unitprice + ls_konv-kwert.
+                    ls_eway-tottxval = ls_eway-tottxval + ls_konv-kwert.
+                    ls_eway-totinvval = ls_eway-totinvval + ls_konv-kwert.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+            CLEAR : ls_ctyp.
+          ENDLOOP.
+        ENDIF.
+
+        IF ls_vbrk-vbrk-fkart = 'ZTAX'.
+          READ TABLE lt_vbrk2 INTO DATA(ls_vbrk2) WITH KEY vbrk-zsgtxt = ls_vbrk1-vbrk-zsgtxt vbrp-matnr = ls_vbrk1-vbrp-matnr.
+          IF sy-subrc = 0.
+            IF r_unit[] IS NOT INITIAL.
+              ls_einv_master-corr_sap_doc = ls_vbrk2-vbrk-vbeln.
+              LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk2-vbrk-knumv AND kposn = ls_vbrk2-vbrp-posnr
+              AND kschl IN r_unit.
+                lv_kwert = ( ls_konv-kbetr * ls_vbrk2-vbrk-kurrf ).
+                ls_item-unitprice = lv_kwert.
+                IF ls_konv-kschl NOT IN r_total[].
+                  lv_oramt = lv_qty * lv_kwert.
+                  lv_discamt = lv_oramt - ls_item-sval.
+                  IF lv_discamt GT 0.
+                    ls_item-disc = lv_discamt.
+                    ls_item-sval = lv_oramt.
+                  ENDIF.
+                ENDIF.
+                CLEAR : lv_kwert,lv_oramt,lv_discamt.
+              ENDLOOP.
+            ELSE.
+              ls_einv_master-corr_sap_doc = ls_vbrk-vbrk-vbeln.
+              CONDENSE : ls_item-sval.
+              lv_kwert = ls_item-sval / lv_qty.
+              ls_item-unitprice = lv_kwert.
+              CLEAR : lv_kwert.
+            ENDIF.
+          ELSE.
+            ls_einv_master-corr_sap_doc = ls_vbrk-vbrk-vbeln.
+            CONDENSE : ls_item-sval.
+            lv_kwert = ls_item-sval / lv_qty.
+            ls_item-unitprice = lv_kwert.
+            CLEAR : lv_kwert.
+          ENDIF.
+        ELSE.
+          ls_einv_master-corr_sap_doc = ls_vbrk-vbrk-vbeln.
+          IF r_unit[] IS NOT INITIAL.
+            CONDENSE : ls_item-sval.
+            lv_kwert = ls_item-sval / lv_qty.
+            ls_item-unitprice = lv_kwert.
+            CLEAR : lv_kwert.
+*            LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+*              AND kschl IN r_unit.
+*              ls_item-unitprice = ls_konv-kbetr.
+*              IF ls_konv-kschl NOT IN r_total[].
+*                lv_oramt = lv_qty * ls_konv-kbetr.
+*                lv_discamt = lv_oramt - ls_item-sval.
+*                IF lv_discamt GT 0.
+*                  ls_item-disc = lv_discamt.
+*                  ls_item-sval = lv_oramt.
+*                ENDIF.
+*              ENDIF.
+*              CLEAR : lv_oramt.
+*            ENDLOOP.
+          ELSE.
+            CONDENSE : ls_item-sval.
+            lv_kwert = ls_item-sval / lv_qty.
+            ls_item-unitprice = lv_kwert.
+            CLEAR : lv_kwert.
+          ENDIF.
+        ENDIF.
+
+        LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+        AND ( kschl = 'JOCG' OR kschl = 'JOSG' OR kschl = 'JOCT' OR kschl = 'JOST' OR kschl = 'JOIG' OR kschl = 'JOIT' )
+        AND kbetr IS NOT INITIAL.
+          IF ls_konv-kschl = 'JOCG' OR ls_konv-kschl = 'JOCT'.
+            DATA(tax) = 'X'.
+            ls_eway-ntr = 'INTRA'.
+            ls_item-crt = ls_konv-kbetr / 10.
+            lv_kwert0 = ( ( ls_item-txval * ls_item-crt ) / 100 ).
+            ls_item-camt = lv_kwert0.
+            ls_item-itmval = ls_item-itmval + lv_kwert0.
+            ls_eway-totcamt = ls_eway-totcamt + lv_kwert0.
+            ls_eway-totinvval = ls_eway-totinvval + lv_kwert0.
+            IF frt = 'X'.
+              ls_item1-crt = ls_item-crt.
+              lv_kwert9 = ( ( ls_item1-txval * ls_item1-crt ) / 100 ).
+              ls_item1-camt = lv_kwert9.
+              ls_item1-itmval = ls_item1-itmval + ls_item1-camt.
+              ls_eway-totcamt = ls_eway-totcamt + ls_item1-camt.
+              ls_eway-totinvval = ls_eway-totinvval + ls_item1-camt.
+            ENDIF.
+          ENDIF.
+          IF ls_konv-kschl = 'JOSG' OR ls_konv-kschl = 'JOST'.
+            tax = 'X'.
+            ls_eway-ntr = 'INTRA'.
+            ls_item-srt = ls_konv-kbetr / 10.
+            lv_kwert0 = ( ( ls_item-txval * ls_item-srt ) / 100 ).
+            ls_item-samt = lv_kwert0.
+            ls_item-itmval = ls_item-itmval + lv_kwert0.
+            ls_eway-totsamt = ls_eway-totsamt + lv_kwert0.
+            ls_eway-totinvval = ls_eway-totinvval + lv_kwert0.
+            IF frt = 'X'.
+              ls_item1-srt = ls_item-srt.
+              lv_kwert9 = ( ( ls_item1-txval * ls_item1-srt ) / 100 ).
+              ls_item1-samt = lv_kwert9.
+              ls_item1-itmval = ls_item1-itmval + ls_item1-samt.
+              ls_eway-totsamt = ls_eway-totsamt + ls_item1-samt.
+              ls_eway-totinvval = ls_eway-totinvval + ls_item1-samt.
+            ENDIF.
+          ENDIF.
+          IF ls_konv-kschl = 'JOIG' OR ls_konv-kschl = 'JOIT'.
+            tax = 'X'.
+            ls_eway-ntr = 'INTER'.
+            ls_item-irt = ls_konv-kbetr / 10.
+            lv_kwert0 = ( ( ls_item-txval * ls_item-irt ) / 100 ).
+            ls_item-iamt = lv_kwert0.
+            ls_item-itmval = ls_item-itmval + lv_kwert0.
+            ls_eway-totiamt = ls_eway-totiamt + lv_kwert0.
+            ls_eway-totinvval = ls_eway-totinvval + lv_kwert0.
+            IF frt = 'X'.
+              ls_item1-irt = ls_item-irt.
+              lv_kwert9 = ( ( ls_item1-txval * ls_item1-irt ) / 100 ).
+              ls_item1-iamt = lv_kwert9.
+              ls_item1-itmval = ls_item1-itmval + ls_item1-iamt.
+              ls_eway-totiamt = ls_eway-totiamt + ls_item1-iamt.
+              ls_eway-totinvval = ls_eway-totinvval + ls_item1-iamt.
+            ENDIF.
+          ENDIF.
+          CLEAR : lv_kwert9,lv_kwert0.
+        ENDLOOP.
+      ELSE.
+        IF r_total[] IS NOT INITIAL.
+          READ TABLE lt_bbu INTO ls_bbu WITH KEY bill_no = ls_vbrk1-vbrp-vbeln bill_item = ls_vbrk1-vbrp-posnr.
+          IF sy-subrc = 0.
+            IF ls_bbu-bill_value IS NOT INITIAL.
+              LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+                AND kschl IN r_total[].
+                IF ls_vbrk1-vbrk-kurrf LE 1.
+                  IF ls_konv-kkurs IS INITIAL.
+                    ls_konv-kkurs = 1.
+                  ENDIF.
+                ELSE.
+                  ls_konv-kkurs = ls_vbrk1-vbrk-kurrf.
+                ENDIF.
+                IF ls_bbu-bbu_curr <> 'INR'.
+                  IF ls_bbu-bbu_curr = 'JPY' OR ls_bbu-bbu_curr_off = 'JPY'..                      " CH-003
+                    ls_konv-kkurs = ls_konv-kkurs / 100.
+                  ENDIF.
+                  ls_item-sval     = ls_item-sval + ( ls_bbu-bill_value * ls_konv-kkurs ).
+                  ls_item-txval    = ls_item-txval + ( ls_bbu-bill_value * ls_konv-kkurs ).
+                  ls_item-itmval   = ls_item-itmval + ( ls_bbu-bill_value * ls_konv-kkurs ).
+                  ls_eway-tottxval  = ls_eway-tottxval + ( ls_bbu-bill_value * ls_konv-kkurs ).
+                  ls_eway-totinvval = ls_eway-totinvval + ( ls_bbu-bill_value * ls_konv-kkurs ).
+                ELSE.
+                  ls_item-sval     = ls_item-sval + ls_bbu-bill_value.
+                  ls_item-txval    = ls_item-txval + ls_bbu-bill_value.
+                  ls_item-itmval   = ls_item-itmval + ls_bbu-bill_value.
+                  ls_eway-tottxval  = ls_eway-tottxval + ls_bbu-bill_value.
+                  ls_eway-totinvval = ls_eway-totinvval + ls_bbu-bill_value.
+                ENDIF.
+                EXIT.
+              ENDLOOP.
+            ELSE.
+              IF ls_bbu-bill_val_off IS NOT INITIAL.
+                LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+                  AND kschl IN r_total[].
+                  IF ls_vbrk1-vbrk-kurrf LE 1.
+                    IF ls_konv-kkurs IS INITIAL.
+                      ls_konv-kkurs = 1.
+                    ENDIF.
+                  ELSE.
+                    ls_konv-kkurs = ls_vbrk1-vbrk-kurrf.
+                  ENDIF.
+                  IF ls_bbu-bbu_curr <> 'INR'.
+                    ls_item-sval     = ls_item-sval + ( ls_bbu-bill_val_off * ls_konv-kkurs ).
+                    ls_item-txval    = ls_item-txval + ( ls_bbu-bill_val_off * ls_konv-kkurs ).
+                    ls_item-itmval   = ls_item-itmval + ( ls_bbu-bill_val_off * ls_konv-kkurs ).
+                    ls_eway-tottxval  = ls_eway-tottxval + ( ls_bbu-bill_val_off * ls_konv-kkurs ).
+                    ls_eway-totinvval = ls_eway-totinvval + ( ls_bbu-bill_val_off * ls_konv-kkurs ).
+                  ELSE.
+                    ls_item-sval     = ls_item-sval + ls_bbu-bill_val_off.
+                    ls_item-txval    = ls_item-txval + ls_bbu-bill_val_off.
+                    ls_item-itmval   = ls_item-itmval + ls_bbu-bill_val_off.
+                    ls_eway-tottxval  = ls_eway-tottxval + ls_bbu-bill_val_off.
+                    ls_eway-totinvval = ls_eway-totinvval + ls_bbu-bill_val_off.
+                  ENDIF.
+                  EXIT.
+                ENDLOOP.
+              ELSE.
+                LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+                AND kschl IN r_total[].
+                  ls_item-sval = ls_item-sval + ls_konv-kwert.
+                  ls_item-txval = ls_item-txval + ls_konv-kwert.
+                  ls_item-itmval = ls_item-itmval + ls_konv-kwert.
+                  ls_eway-tottxval = ls_eway-tottxval + ls_konv-kwert.
+                  ls_eway-totinvval = ls_eway-totinvval + ls_konv-kwert.
+                ENDLOOP.
+              ENDIF.
+            ENDIF.
+          ELSE.
+            LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+            AND kschl IN r_total[].
+              ls_item-sval = ls_item-sval + ( ls_konv-kwert * ls_vbrk1-vbrk-kurrf ).
+              ls_item-txval = ls_item-txval + ( ls_konv-kwert * ls_vbrk1-vbrk-kurrf ).
+              ls_item-itmval = ls_item-itmval + ( ls_konv-kwert * ls_vbrk1-vbrk-kurrf ).
+              ls_eway-tottxval = ls_eway-tottxval + ( ls_konv-kwert * ls_vbrk1-vbrk-kurrf ).
+              ls_eway-totinvval = ls_eway-totinvval + ( ls_konv-kwert * ls_vbrk1-vbrk-kurrf ).
+            ENDLOOP.
+          ENDIF.
+
+*          LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+*            AND kschl IN r_total[].
+*            IF ls_konv-kschl = 'ZRS0'.
+*            ELSE.
+*              IF ls_vbrk1-vbrk-waerk = 'JPY'.
+*                ls_konv-kwert = ls_konv-kwert * 100.
+*              ENDIF.
+*            ENDIF.
+*            lv_kwert = ls_konv-kwert * ls_vbrk1-vbrk-kurrf.
+*            IF ls_vbrk1-vbrk-waerk = 'JPY'.
+*              lv_kwert = lv_kwert / 100.
+*            ENDIF.
+*            ls_item-sval = ls_item-sval + lv_kwert.
+*            ls_item-txval = ls_item-txval + lv_kwert.
+*            ls_item-itmval = ls_item-itmval + lv_kwert.
+*            ls_eway-tottxval = ls_eway-tottxval + lv_kwert.
+*            ls_eway-totinvval = ls_eway-totinvval + lv_kwert.
+*            CLEAR : lv_kwert.
+*          ENDLOOP.
+        ENDIF.
+
+        IF r_other[] IS NOT INITIAL.
+          LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+          AND kschl IN r_other.
+            lv_kwert = ls_konv-kwert * ls_vbrk1-vbrk-kurrf.
+            IF ls_vbrk1-vbrk-waerk = 'JPY'.
+              lv_kwert = lv_kwert / 100.
+            ENDIF.
+            IF lv_count = 1.
+              READ TABLE lt_ctyp INTO ls_ctyp WITH KEY werks = ls_vbrk-vbrp-werks fkart = ls_vbrk-vbrk-fkart
+              val_typ = 'OTHER' kschl = ls_konv-kschl.
+              IF sy-subrc = 0 .
+                IF ls_ctyp-operator = '+'.
+                  IF lv_kwert LT 0.
+                    lv_kwert = lv_kwert * -1.
+                  ENDIF.
+                  ls_item-othchrg = ls_item-othchrg + lv_kwert.
+                  ls_item-itmval = ls_item-itmval + lv_kwert.
+*                  ls_eway-totothchrg = ls_eway-totothchrg + lv_kwert.
+                  ls_eway-totinvval = ls_eway-totinvval + lv_kwert.
+                ELSEIF ls_ctyp-operator = '-'.
+                  IF lv_kwert GT 0.
+                    lv_kwert = lv_kwert * -1.
+                  ENDIF.
+                  ls_item-disc = ls_item-disc - lv_kwert.
+                  ls_item-txval = ls_item-txval + lv_kwert.
+                  ls_item-itmval = ls_item-itmval + lv_kwert.
+                  ls_eway-totinvval = ls_eway-totinvval + lv_kwert.
+                ENDIF.
+              ENDIF.
+            ELSE.
+              READ TABLE lt_ctyp INTO ls_ctyp WITH KEY werks = ls_vbrk-vbrp-werks fkart = ls_vbrk-vbrk-fkart
+              val_typ = 'OTHER' kschl = ls_konv-kschl pltyp = ls_vbrk-vbrk-pltyp.
+              IF sy-subrc = 0 .
+                IF ls_ctyp-operator = '+'.
+                  IF lv_kwert LT 0.
+                    lv_kwert = lv_kwert * -1.
+                  ENDIF.
+                  ls_item-othchrg = ls_item-othchrg + lv_kwert.
+                  ls_item-itmval = ls_item-itmval + lv_kwert.
+*                  ls_eway-totothchrg = ls_eway-totothchrg + lv_kwert.
+                  ls_eway-totinvval = ls_eway-totinvval + lv_kwert.
+                ELSEIF ls_ctyp-operator = '-'.
+                  IF lv_kwert GT 0.
+                    lv_kwert = lv_kwert * -1.
+                  ENDIF.
+                  ls_item-disc = ls_item-disc - lv_kwert.
+                  ls_item-txval = ls_item-txval + lv_kwert.
+                  ls_item-itmval = ls_item-itmval + lv_kwert.
+                  ls_eway-totinvval = ls_eway-totinvval + lv_kwert.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+            CLEAR : ls_ctyp,lv_kwert.
+          ENDLOOP.
+        ENDIF.
+
+        IF r_othert[] IS NOT INITIAL.
+          lv_posnr = lv_posnr + 1.
+          LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+          AND kschl IN r_othert.
+            lv_kwert = ls_konv-kwert * ls_vbrk1-vbrk-kurrf.
+            IF ls_vbrk1-vbrk-waerk = 'JPY'.
+              lv_kwert = lv_kwert / 100.
+            ENDIF.
+
+            IF lv_count = 1.
+              READ TABLE lt_ctyp INTO ls_ctyp WITH KEY werks = ls_vbrk-vbrp-werks fkart = ls_vbrk-vbrk-fkart
+              val_typ = 'OTHERT' kschl = ls_konv-kschl.
+              IF sy-subrc = 0.
+                IF lv_kwert LT 0.
+                  lv_kwert = lv_kwert * -1.
+                  ls_item-disc = ls_item-disc + lv_kwert.
+                  ls_item-txval = ls_item-txval - lv_kwert.
+                  ls_item-itmval = ls_item-itmval - lv_kwert.
+                  ls_eway-tottxval = ls_eway-tottxval - lv_kwert.
+                  ls_eway-totinvval = ls_eway-totinvval - lv_kwert.
+                ELSE.
+                  IF ls_konv-kwert IS NOT INITIAL.
+                    frt = 'X'.
+                    ls_item1-no = ls_vbrk1-vbrk-zsgtxt.
+                    IF ls_konv-kschl = 'BOCW'.
+                      ls_item1-prdnm = 'BOCW'.
+                    ELSE.
+                      ls_item1-prdnm = 'FREIGHT'.
+                    ENDIF.
+                    ls_item1-hsncd = ls_vbrk1-marc-steuc.
+                    lv_qty1 = 1.
+                    ls_item1-qty = lv_qty1.
+                    CONDENSE ls_vbrk1-vbrp-meins.
+                    TRANSLATE ls_vbrk1-vbrp-meins TO UPPER CASE.
+                    SELECT einvuom UP TO 1 ROWS
+                      FROM zeinv_uom
+                      INTO ls_item1-unit WHERE sapuom = ls_vbrk1-vbrp-meins.
+                    ENDSELECT.
+                    CONDENSE ls_item1-unit.
+                    TRANSLATE ls_item1-unit TO UPPER CASE.
+                    ls_item1-num = lv_posnr.
+                    ls_item1-sval = ls_item1-sval + lv_kwert.
+                    ls_item1-txval = ls_item1-txval + lv_kwert.
+                    ls_item1-itmval = ls_item1-itmval + lv_kwert.
+                    ls_item1-unitprice = ls_item1-unitprice + lv_kwert.
+                    ls_eway-tottxval = ls_eway-tottxval + lv_kwert.
+                    ls_eway-totinvval = ls_eway-totinvval + lv_kwert.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+            ELSE.
+              READ TABLE lt_ctyp INTO ls_ctyp WITH KEY werks = ls_vbrk-vbrp-werks fkart = ls_vbrk-vbrk-fkart
+              val_typ = 'OTHERT' kschl = ls_konv-kschl pltyp = ls_vbrk-vbrk-pltyp.
+              IF sy-subrc = 0.
+                IF lv_kwert LT 0.
+                  lv_kwert = lv_kwert * -1.
+                  ls_item-disc = ls_item-disc + lv_kwert.
+                  ls_item-txval = ls_item-txval - lv_kwert.
+                  ls_item-itmval = ls_item-itmval - lv_kwert.
+                  ls_eway-tottxval = ls_eway-tottxval - lv_kwert.
+                  ls_eway-totinvval = ls_eway-totinvval - lv_kwert.
+                ELSE.
+                  IF ls_konv-kwert IS NOT INITIAL.
+                    lv_posnr = lv_posnr + 1.
+                    frt = 'X'.
+                    ls_item1-no = ls_vbrk1-vbrk-zsgtxt.
+                    IF ls_konv-kschl = 'BOCW'.
+                      ls_item1-prdnm = 'BOCW'.
+                    ELSE.
+                      ls_item1-prdnm = 'FREIGHT'.
+                    ENDIF.
+                    ls_item1-hsncd = ls_vbrk1-marc-steuc.
+                    lv_qty1 = 1.
+                    ls_item1-qty = lv_qty1.
+                    CONDENSE ls_vbrk1-vbrp-meins.
+                    TRANSLATE ls_vbrk1-vbrp-meins TO UPPER CASE.
+                    SELECT einvuom UP TO 1 ROWS
+                      FROM zeinv_uom
+                      INTO ls_item1-unit WHERE sapuom = ls_vbrk1-vbrp-meins.
+                    ENDSELECT.
+                    CONDENSE ls_item1-unit.
+                    TRANSLATE ls_item1-unit TO UPPER CASE.
+                    ls_item1-num = lv_posnr.
+                    ls_item1-sval = ls_item1-sval + lv_kwert.
+                    ls_item1-txval = ls_item1-txval + lv_kwert.
+                    ls_item1-itmval = ls_item1-itmval + lv_kwert.
+                    ls_item1-unitprice = ls_item1-unitprice + lv_kwert.
+                    ls_eway-tottxval = ls_eway-tottxval + lv_kwert.
+                    ls_eway-totinvval = ls_eway-totinvval + lv_kwert.
+                  ENDIF.
+                ENDIF.
+              ENDIF.
+            ENDIF.
+            CLEAR : ls_ctyp,lv_kwert.
+          ENDLOOP.
+        ENDIF.
+
+        IF r_unit[] IS NOT INITIAL.
+          CONDENSE : ls_item-sval.
+          lv_kwert = ls_item-sval / lv_qty.
+          ls_item-unitprice = lv_kwert.
+          CLEAR : lv_kwert.
+*          LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+*            AND kschl IN r_unit[].
+*            lv_kwert = ls_konv-kbetr * ls_vbrk1-vbrk-kurrf.
+*            IF ls_vbrk1-vbrk-waerk = 'JPY'.
+*              lv_kwert = lv_kwert / 100.
+*            ENDIF.
+*            ls_item-unitprice = lv_kwert.
+*            IF ls_konv-kschl NOT IN r_total[].
+*              lv_oramt = lv_qty * lv_kwert.
+*              lv_discamt = lv_oramt - ls_item-sval.
+*              IF lv_discamt GT 0.
+*                ls_item-disc = lv_discamt.
+*                ls_item-sval = lv_oramt.
+*              ENDIF.
+*            ENDIF.
+*            CLEAR : lv_oramt,lv_kwert,lv_discamt.
+*          ENDLOOP.
+        ELSE.
+          CONDENSE : ls_item-sval.
+          lv_kwert = ls_item-sval / lv_qty.
+          ls_item-unitprice = lv_kwert.
+          CLEAR : lv_kwert.
+        ENDIF.
+
+        ls_einv_master-corr_sap_doc = ls_vbrk-vbrk-vbeln.
+
+        LOOP AT lt_konv INTO ls_konv WHERE knumv = ls_vbrk1-vbrk-knumv AND kposn = ls_vbrk1-vbrp-posnr
+        AND ( kschl = 'JOCG' OR kschl = 'JOSG' OR kschl = 'JOCT' OR kschl = 'JOST' OR kschl = 'JOIG' OR kschl = 'JOIT' )
+        AND kbetr IS NOT INITIAL.
+          IF ls_konv-kschl = 'JOCG' OR ls_konv-kschl = 'JOCT'.
+            tax = 'X'.
+            ls_eway-ntr = 'INTRA'.
+            ls_item-crt = ls_konv-kbetr / 10.
+            lv_kwert = ( ( ls_item-sval - ls_item-disc ) * ls_item-crt / 100 ).
+            ls_item-camt = lv_kwert.
+            ls_item-itmval = ls_item-itmval + lv_kwert.
+            ls_eway-totcamt = ls_eway-totcamt + lv_kwert.
+            ls_eway-totinvval = ls_eway-totinvval + lv_kwert.
+            IF frt = 'X'.
+              ls_item1-crt = ls_item-crt.
+              lv_kwert9 = ( ( ls_item1-sval * ls_item1-crt ) / 100 ).
+              ls_item1-camt = lv_kwert9.
+              ls_item1-itmval = ls_item1-itmval + ls_item1-camt.
+              ls_eway-totcamt = ls_eway-totcamt + ls_item1-camt.
+              ls_eway-totinvval = ls_eway-totinvval + ls_item1-camt.
+            ENDIF.
+            CLEAR : lv_kwert.
+          ENDIF.
+          IF ls_konv-kschl = 'JOSG' OR ls_konv-kschl = 'JOST'.
+            tax = 'X'.
+            ls_eway-ntr = 'INTRA'.
+            ls_item-srt = ls_konv-kbetr / 10.
+            lv_kwert = ( ( ls_item-sval - ls_item-disc ) * ls_item-srt / 100 ).
+            ls_item-samt = lv_kwert.
+            ls_item-itmval = ls_item-itmval + lv_kwert.
+            ls_eway-totsamt = ls_eway-totsamt + lv_kwert.
+            ls_eway-totinvval = ls_eway-totinvval + lv_kwert.
+            IF frt = 'X'.
+              ls_item1-srt = ls_item-srt.
+              lv_kwert9 = ( ( ls_item1-sval * ls_item1-srt ) / 100 ).
+              ls_item1-samt = lv_kwert9.
+              ls_item1-itmval = ls_item1-itmval + ls_item1-samt.
+              ls_eway-totsamt = ls_eway-totsamt + ls_item1-samt.
+              ls_eway-totinvval = ls_eway-totinvval + ls_item1-samt.
+            ENDIF.
+            CLEAR : lv_kwert.
+          ENDIF.
+          IF ls_konv-kschl = 'JOIG' OR ls_konv-kschl = 'JOIT'.
+            tax = 'X'.
+            ls_eway-ntr = 'INTER'.
+            ls_item-irt = ls_konv-kbetr / 10.
+            lv_kwert = ( ( ls_item-sval - ls_item-disc ) * ls_item-irt / 100 ).
+            ls_item-iamt = lv_kwert.
+            ls_item-itmval = ls_item-itmval + lv_kwert.
+            ls_eway-totiamt = ls_eway-totiamt + lv_kwert.
+            ls_eway-totinvval = ls_eway-totinvval + lv_kwert.
+            IF frt = 'X'.
+              ls_item1-irt = ls_item-irt.
+              lv_kwert9 = ( ( ls_item1-sval * ls_item1-irt ) / 100 ).
+              ls_item1-iamt = lv_kwert9.
+              ls_item1-itmval = ls_item1-itmval + ls_item1-iamt.
+              ls_eway-totiamt = ls_eway-totiamt + ls_item1-iamt.
+              ls_eway-totinvval = ls_eway-totinvval + ls_item1-iamt.
+            ENDIF.
+            CLEAR : lv_kwert.
+          ENDIF.
+          CLEAR : lv_kwert9.
+        ENDLOOP.
+      ENDIF.
+
+      IF ls_eway-catg = 'EXWOP' OR ls_eway-catg = 'EXWP'.
+        IF tax = 'X'.
+          ls_eway-catg = 'EXWP'.
+        ELSE.
+          ls_eway-catg = 'EXWOP'.
+        ENDIF.
+      ENDIF.
+
+      IF ls_eway-catg = 'SEWOP' OR ls_eway-catg = 'SEWP'.
+        IF tax = 'X'.
+          ls_eway-catg = 'SEWP'.
+        ELSE.
+          ls_eway-catg = 'SEWOP'.
+        ENDIF.
+      ENDIF.
+
+      CLEAR : tax.
+      IF ls_eway-catg = 'EXWP' OR ls_eway-catg = 'EXWOP' OR ls_eway-catg = 'SEWOP' OR ls_eway-catg = 'SEWP'.
+        IF ls_eway-ntr IS INITIAL.
+          ls_eway-ntr = 'INTER'.
+        ENDIF.
+      ENDIF.
+
+      CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+        EXPORTING
+          intext            = ls_item-prdnm
+        IMPORTING
+          outtext           = ls_item-prdnm
+        EXCEPTIONS
+          invalid_codepage  = 1
+          codepage_mismatch = 2
+          internal_error    = 3
+          cannot_convert    = 4
+          fields_not_type_c = 5
+          OTHERS            = 6.
+
+      CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+        EXPORTING
+          intext            = ls_item-prddesc
+        IMPORTING
+          outtext           = ls_item-prddesc
+        EXCEPTIONS
+          invalid_codepage  = 1
+          codepage_mismatch = 2
+          internal_error    = 3
+          cannot_convert    = 4
+          fields_not_type_c = 5
+          OTHERS            = 6.
+      CONDENSE : ls_item-no,ls_item-prdnm,ls_item-hsncd,ls_item-qty,ls_item-unit,ls_item-num
+                 ,ls_item-unitprice,ls_item-itmval,ls_item-sval,ls_item-txval,ls_item-crt,ls_item-disc
+                 ,ls_item-srt,ls_item-irt,ls_item-othchrg,ls_item-iamt,ls_item-camt,ls_item-samt
+                 ,ls_eway-totothchrg,ls_eway-tottxval,ls_eway-totinvval,ls_eway-totiamt,ls_eway-totcamt,ls_eway-totsamt.
+      CONDENSE : ls_item1-no,ls_item1-prdnm,ls_item1-hsncd,ls_item1-qty,ls_item1-unit,ls_item1-num
+           ,ls_item1-unitprice,ls_item1-itmval,ls_item1-sval,ls_item1-txval,ls_item1-crt,ls_item1-disc
+           ,ls_item1-srt,ls_item1-irt,ls_item1-othchrg,ls_item1-iamt,ls_item1-camt,ls_item1-samt.
+
+      IF ls_item-irt IS INITIAL.
+        ls_item-irt = '0'.
+      ENDIF.
+      IF ls_item-crt IS INITIAL.
+        ls_item-crt = '0'.
+      ENDIF.
+      IF ls_item-srt IS INITIAL.
+        ls_item-srt = '0'.
+      ENDIF.
+      IF ls_item-iamt IS INITIAL.
+        ls_item-iamt = '0'.
+      ENDIF.
+      IF ls_item-camt IS INITIAL.
+        ls_item-camt = '0'.
+      ENDIF.
+      IF ls_item-samt IS INITIAL.
+        ls_item-samt = '0'.
+      ENDIF.
+      IF ls_item-othchrg IS INITIAL.
+        ls_item-othchrg = '0'.
+      ENDIF.
+      IF ls_item1-irt IS INITIAL.
+        ls_item1-irt = '0'.
+      ENDIF.
+      IF ls_item1-crt IS INITIAL.
+        ls_item1-crt = '0'.
+      ENDIF.
+      IF ls_item1-srt IS INITIAL.
+        ls_item1-srt = '0'.
+      ENDIF.
+      IF ls_item1-iamt IS INITIAL.
+        ls_item1-iamt = '0'.
+      ENDIF.
+      IF ls_item1-camt IS INITIAL.
+        ls_item1-camt = '0'.
+      ENDIF.
+      IF ls_item1-samt IS INITIAL.
+        ls_item1-samt = '0'.
+      ENDIF.
+      IF ls_item1-othchrg IS INITIAL.
+        ls_item1-othchrg = '0'.
+      ENDIF.
+      APPEND ls_item TO lt_item.
+      IF ls_item1-num IS NOT INITIAL.
+        APPEND ls_item1 TO lt_item.
+      ENDIF.
+      CLEAR : ls_item,lv_qty,ls_ctyp,ls_item1.
+    ENDLOOP.
+    ls_eway-itemlist = lt_item[].
+*********************************
+    CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+      EXPORTING
+        intext            = ls_eway-strdnm
+      IMPORTING
+        outtext           = ls_eway-strdnm
+      EXCEPTIONS
+        invalid_codepage  = 1
+        codepage_mismatch = 2
+        internal_error    = 3
+        cannot_convert    = 4
+        fields_not_type_c = 5
+        OTHERS            = 6.
+
+    CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+      EXPORTING
+        intext            = ls_eway-sbnm
+      IMPORTING
+        outtext           = ls_eway-sbnm
+      EXCEPTIONS
+        invalid_codepage  = 1
+        codepage_mismatch = 2
+        internal_error    = 3
+        cannot_convert    = 4
+        fields_not_type_c = 5
+        OTHERS            = 6.
+
+    CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+      EXPORTING
+        intext            = ls_eway-btrdnm
+      IMPORTING
+        outtext           = ls_eway-btrdnm
+      EXCEPTIONS
+        invalid_codepage  = 1
+        codepage_mismatch = 2
+        internal_error    = 3
+        cannot_convert    = 4
+        fields_not_type_c = 5
+        OTHERS            = 6.
+
+    CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+      EXPORTING
+        intext            = ls_eway-bbnm
+      IMPORTING
+        outtext           = ls_eway-bbnm
+      EXCEPTIONS
+        invalid_codepage  = 1
+        codepage_mismatch = 2
+        internal_error    = 3
+        cannot_convert    = 4
+        fields_not_type_c = 5
+        OTHERS            = 6.
+
+    CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+      EXPORTING
+        intext            = ls_eway-totrd_nm
+      IMPORTING
+        outtext           = ls_eway-totrd_nm
+      EXCEPTIONS
+        invalid_codepage  = 1
+        codepage_mismatch = 2
+        internal_error    = 3
+        cannot_convert    = 4
+        fields_not_type_c = 5
+        OTHERS            = 6.
+
+    CALL FUNCTION 'SCP_REPLACE_STRANGE_CHARS'
+      EXPORTING
+        intext            = ls_eway-tobnm
+      IMPORTING
+        outtext           = ls_eway-tobnm
+      EXCEPTIONS
+        invalid_codepage  = 1
+        codepage_mismatch = 2
+        internal_error    = 3
+        cannot_convert    = 4
+        fields_not_type_c = 5
+        OTHERS            = 6.
+
+    CONDENSE : ls_eway-forcur,ls_eway-ntr.
+    IF ls_eway-forcur IS INITIAL.
+      ls_eway-forcur = 'null'.
+    ENDIF.
+    IF ls_eway-invforcur IS INITIAL.
+      ls_eway-invforcur = '0'.
+    ENDIF.
+    IF ls_eway-totothchrg IS INITIAL.
+      ls_eway-totothchrg = '0'.
+    ENDIF.
+    IF ls_eway-totiamt IS INITIAL.
+      ls_eway-totiamt = '0'.
+    ENDIF.
+    IF ls_eway-totcamt IS INITIAL.
+      ls_eway-totcamt = '0'.
+    ENDIF.
+    IF ls_eway-totsamt IS INITIAL.
+      ls_eway-totsamt = '0'.
+    ENDIF.
+
+*********************************************    E-Way bill  " CH-001 ++  *********************************************************************
+    IF ( ls_vbrk-vbrk-fkart = 'ZFGI' ) .
+      READ TABLE it_vbfa INTO DATA(wa_vbfa) WITH KEY vbeln = ls_vbrk-vbrk-vbeln.
+      IF sy-subrc = 0.
+*        ls_eway-transname = wa_vbfa-ztrans_name . "Transporter Name
+*        ls_eway-transdocno = wa_vbfa-zlr_no. "Transporter Document No.
+*        IF wa_vbfa-zlr_date IS NOT INITIAL.
+*          ls_eway-transdocdate =   wa_vbfa-zlr_date+6(2) && |-|  && wa_vbfa-zlr_date+4(2) && |-|  && wa_vbfa-zlr_date+0(4)  . "Transporter Document Date
+*        ENDIF.
+*        ls_eway-vehno = wa_vbfa-veh_no. "Vehicle No.
+*        ls_eway-transmode = wa_vbfa-vtext. "Mode of transportation
+**        ls_eway-transmode = wa_vbfa-traty. "Mode of transportation
+      ENDIF.
+
+      ls_eway-subsplytyp = 'Supply'. "Sub types of Supply
+*      ls_eway-subsplydes = 'Free Supplies'. "Other Sub Supply Description
+
+*      lv_name = ls_vbrk-vbrk-vbeln.
+      SELECT vbelv FROM vbfa UP TO 1 ROWS INTO is_vbelv WHERE vbeln = ls_vbrk-vbrk-vbeln AND vbtyp_v = 'J' ORDER BY vbelv posnv
+      vbeln posnn vbtyp_n. ENDSELECT. "BOC $LTIAUTO: #3
+      lv_name =  ls_vbrk-vbrk-vbeln .
+
+      CALL FUNCTION 'READ_TEXT'
+        EXPORTING
+          id                      = 'YLTI'
+          language                = 'E'
+          name                    = lv_name
+          object                  = 'VBBK'
+        TABLES
+          lines                   = it_lines
+        EXCEPTIONS
+          id                      = 1
+          language                = 2
+          name                    = 3
+          not_found               = 4
+          object                  = 5
+          reference_check         = 6
+          wrong_access_to_archive = 7.
+      IF sy-subrc = 0.
+        CLEAR: wa_lines.
+        LOOP AT it_lines INTO wa_lines.
+          CONCATENATE ls_eway-transid wa_lines-tdline INTO ls_eway-transid SEPARATED BY space.
+        ENDLOOP.
+        CONDENSE ls_eway-transid.
+        REPLACE ALL OCCURRENCES OF '<(>&<)>' IN ls_eway-transid WITH '&'.
+*      ls_eway-transid = ''. " Transporter ID
+      ENDIF.
+      REFRESH : it_lines.
+
+      lv_name = ls_vbrk-vbrk-vbeln.
+      CONDENSE lv_name.
+      CALL FUNCTION 'READ_TEXT'
+        EXPORTING
+          id                      = 'ZZV1'
+          language                = 'E'
+          name                    = lv_name
+          object                  = 'VBBK'
+        TABLES
+          lines                   = it_lines
+        EXCEPTIONS
+          id                      = 1
+          language                = 2
+          name                    = 3
+          not_found               = 4
+          object                  = 5
+          reference_check         = 6
+          wrong_access_to_archive = 7.
+      IF sy-subrc = 0.
+        CLEAR: wa_lines.
+        LOOP AT it_lines INTO wa_lines.
+          CONCATENATE ls_eway-vehtyp wa_lines-tdline INTO ls_eway-vehtyp SEPARATED BY space.
+        ENDLOOP.
+        CONDENSE ls_eway-vehtyp.
+        REPLACE ALL OCCURRENCES OF '<(>&<)>' IN ls_eway-vehtyp WITH '&'.
+*      ls_eway-vehtyp = ''. "Type of Vehicle
+      ENDIF.
+      REFRESH : it_lines.
+
+      CALL FUNCTION 'READ_TEXT'
+        EXPORTING
+          id                      = 'YLLR'
+          language                = 'E'
+          name                    = lv_name
+          object                  = 'VBBK'
+        TABLES
+          lines                   = it_lines
+        EXCEPTIONS
+          id                      = 1
+          language                = 2
+          name                    = 3
+          not_found               = 4
+          object                  = 5
+          reference_check         = 6
+          wrong_access_to_archive = 7.
+      IF sy-subrc = 0.
+        CLEAR: wa_lines.
+        LOOP AT it_lines INTO wa_lines.
+          CONCATENATE ls_eway-transdocno wa_lines-tdline INTO ls_eway-transdocno SEPARATED BY space.
+        ENDLOOP.
+        CONDENSE ls_eway-transdocno.
+        REPLACE ALL OCCURRENCES OF '<(>&<)>' IN ls_eway-transdocno WITH '&'.
+*      ls_eway-vehtyp = ''. "Type of Vehicle
+      ENDIF.
+      REFRESH : it_lines.
+
+      CALL FUNCTION 'READ_TEXT'
+        EXPORTING
+          id                      = 'YLLD'
+          language                = 'E'
+          name                    = lv_name
+          object                  = 'VBBK'
+        TABLES
+          lines                   = it_lines
+        EXCEPTIONS
+          id                      = 1
+          language                = 2
+          name                    = 3
+          not_found               = 4
+          object                  = 5
+          reference_check         = 6
+          wrong_access_to_archive = 7.
+      IF sy-subrc = 0.
+        CLEAR: wa_lines.
+        LOOP AT it_lines INTO wa_lines.
+          CONCATENATE ls_eway-transdocdate wa_lines-tdline INTO ls_eway-transdocdate SEPARATED BY space.
+        ENDLOOP.
+        CONDENSE ls_eway-transdocdate.
+        REPLACE ALL OCCURRENCES OF '<(>&<)>' IN ls_eway-transdocdate WITH '&'.
+*      ls_eway-vehtyp = ''. "Type of Vehicle
+      ENDIF.
+      REFRESH : it_lines.
+
+      CALL FUNCTION 'READ_TEXT'
+        EXPORTING
+          id                      = 'YLTN'
+          language                = 'E'
+          name                    = lv_name
+          object                  = 'VBBK'
+        TABLES
+          lines                   = it_lines
+        EXCEPTIONS
+          id                      = 1
+          language                = 2
+          name                    = 3
+          not_found               = 4
+          object                  = 5
+          reference_check         = 6
+          wrong_access_to_archive = 7.
+      IF sy-subrc = 0.
+        CLEAR: wa_lines.
+        LOOP AT it_lines INTO wa_lines.
+          CONCATENATE ls_eway-transname wa_lines-tdline INTO ls_eway-transname SEPARATED BY space.
+        ENDLOOP.
+        CONDENSE ls_eway-transname.
+        REPLACE ALL OCCURRENCES OF '<(>&<)>' IN ls_eway-transname WITH '&'.
+*      ls_eway-vehtyp = ''. "Type of Vehicle
+      ENDIF.
+      REFRESH : it_lines.
+
+      CALL FUNCTION 'READ_TEXT'
+        EXPORTING
+          id                      = 'ZTP3'
+          language                = 'E'
+          name                    = lv_name
+          object                  = 'VBBK'
+        TABLES
+          lines                   = it_lines
+        EXCEPTIONS
+          id                      = 1
+          language                = 2
+          name                    = 3
+          not_found               = 4
+          object                  = 5
+          reference_check         = 6
+          wrong_access_to_archive = 7.
+      IF sy-subrc = 0.
+        CLEAR: wa_lines.
+        LOOP AT it_lines INTO wa_lines.
+          CONCATENATE ls_eway-transmode wa_lines-tdline INTO ls_eway-transmode SEPARATED BY space.
+        ENDLOOP.
+        CONDENSE ls_eway-transmode.
+        REPLACE ALL OCCURRENCES OF '<(>&<)>' IN ls_eway-vehtyp WITH '&'.
+*      ls_eway-vehtyp = ''. "Type of Vehicle
+      ENDIF.
+      REFRESH : it_lines.
+
+      CALL FUNCTION 'READ_TEXT'
+        EXPORTING
+          id                      = 'YLVN'
+          language                = 'E'
+          name                    = lv_name
+          object                  = 'VBBK'
+        TABLES
+          lines                   = it_lines
+        EXCEPTIONS
+          id                      = 1
+          language                = 2
+          name                    = 3
+          not_found               = 4
+          object                  = 5
+          reference_check         = 6
+          wrong_access_to_archive = 7.
+      IF sy-subrc = 0.
+        CLEAR: wa_lines.
+        LOOP AT it_lines INTO wa_lines.
+          CONCATENATE ls_eway-vehno wa_lines-tdline INTO ls_eway-vehno SEPARATED BY space.
+        ENDLOOP.
+        CONDENSE ls_eway-vehno.
+        REPLACE ALL OCCURRENCES OF '<(>&<)>' IN ls_eway-vehno WITH '&'.
+*      ls_eway-vehtyp = ''. "Type of Vehicle
+      ENDIF.
+      REFRESH : it_lines.
+
+      CALL FUNCTION 'READ_TEXT'
+        EXPORTING
+          id                      = 'YLDT'
+          language                = 'E'
+          name                    = lv_name
+          object                  = 'VBBK'
+        TABLES
+          lines                   = it_lines
+        EXCEPTIONS
+          id                      = 1
+          language                = 2
+          name                    = 3
+          not_found               = 4
+          object                  = 5
+          reference_check         = 6
+          wrong_access_to_archive = 7.
+      IF sy-subrc = 0.
+        CLEAR: wa_lines.
+        LOOP AT it_lines INTO wa_lines.
+          CONCATENATE ls_eway-transdist wa_lines-tdline INTO ls_eway-transdist SEPARATED BY space.
+        ENDLOOP.
+        CONDENSE ls_eway-transdist.
+        REPLACE ALL OCCURRENCES OF '<(>&<)>' IN ls_eway-transdist WITH '&'.
+*      ls_eway-transdist = ''. "Distance of transportation (in Kms)
+      ENDIF.
+      REFRESH : it_lines.
+    ENDIF.
+
+*    ls_eway-kdrefinum = ''. "Reference Invoice Number in case of CKD/SKD
+*    ls_eway-kdrefidt = ''. "Reference Invoice date  in case of CKD/SKD
+*********************************************    E-Way bill " CH-001 ++  *********************************************************************
+
+    CONDENSE : ls_eway-doctype,ls_eway-catg,ls_eway-trntyp,ls_eway-no,ls_eway-rchrg,ls_eway-sgstin,ls_eway-strdnm,ls_eway-usergstin
+           ,ls_eway-sloc,ls_eway-sstcd,ls_eway-spin,ls_eway-bgstin,ls_eway-btrdnm
+           ,ls_eway-bloc,ls_eway-bstcd,ls_eway-bpin,ls_eway-togstin,ls_eway-totrd_nm
+           ,ls_eway-toloc,ls_eway-tostcd,ls_eway-topin,ls_eway-taxsch,ls_eway-totinvval,
+           ls_eway-tottxval,ls_eway-totcamt,ls_eway-totsamt,ls_eway-totiamt,
+            ls_eway-transname,ls_eway-transdocno,ls_eway-transdocdate,ls_eway-vehno,   "   CH-001 ++
+                    ls_eway-transmode,ls_eway-subsplytyp,ls_eway-vehtyp,ls_eway-transdist.   "   CH-001 ++
+    APPEND ls_eway TO lt_eway.
+
+*    ls_einv_master-bukrs = ls_vbrk-vbrk-bukrs.
+*    ls_einv_master-werks = ls_vbrk-vbrp-werks.
+*    ls_einv_master-region = ls_vbrk-t001w-regio.
+*    ls_einv_master-invoice_no = ls_vbrk-vbrk-zsgtxt.
+*    ls_einv_master-user_gstin = ls_eway-usergstin.
+*    ls_einv_master-zmodule = 'SD'.
+*    ls_einv_master-sap_doc = ls_vbrk-vbrk-vbeln.
+*    ls_einv_master-creation_date = ls_vbrk-vbrk-erdat.
+*    CONDENSE : ls_einv_master-bukrs,ls_einv_master-werks,ls_einv_master-region,ls_einv_master-invoice_no
+*               ,ls_einv_master-zmodule,ls_einv_master-sap_doc.
+*    APPEND ls_einv_master TO lt_einv_master.
+    SELECT * FROM zeinv_master
+      INTO TABLE @lt_einv_master
+      WHERE invoice_no IN @s_ti AND werks IN @s_werks AND zmodule = 'SD' AND irn <> ''.
+    CLEAR : ls_einv_master,lv_name.
+    CLEAR : lv_count,ls_eway,lv_posnr,ls_shpadr,ls_shkna2,ls_shpadr1,ls_t005u9,
+            ls_vbpa1,ls_shkna1,ls_vbpa2.             "ad by akshay_d-118847
+    REFRESH : r_unit,r_total,lt_item,ls_eway-itemlist,lt_ctyp[].
+  ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form build_fcat
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM build_fcat .
+  DATA:l_fieldcat TYPE lvc_s_fcat.
+  REFRESH : i_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'CHECK'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Select'.
+  l_fieldcat-checkbox  = 'X'.
+  l_fieldcat-edit      = 'X'.
+  l_fieldcat-fix_column = 'X'.
+  l_fieldcat-outputlen  = '6'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'OSTATUS'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Status'.
+  l_fieldcat-outputlen  = '15'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'CATG'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Category'.
+  l_fieldcat-outputlen  = '10'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TAXSCH'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Tax Scheme'.
+  l_fieldcat-outputlen  = '10'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'DOCTYPE'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Doc Typ'.
+  l_fieldcat-outputlen  = '7'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TRNTYP'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Trans Typ'.
+  l_fieldcat-outputlen  = '9'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'NO'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Doc No.'.
+  l_fieldcat-outputlen  = '20'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'DT'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Doc Dt'.
+  l_fieldcat-outputlen  = '10'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'RCHRG'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Rev Chrg'.
+  l_fieldcat-outputlen  = '8'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'POS'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Place of supply'.
+  l_fieldcat-outputlen  = '15'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'SGSTIN'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Supplier GSTIN'.
+  l_fieldcat-outputlen  = '15'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'STRDNM'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Supplier Name'.
+  l_fieldcat-outputlen  = '30'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'SLOC'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Supplier Location'.
+  l_fieldcat-outputlen  = '20'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'SSTCD'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Supplier State'.
+  l_fieldcat-outputlen  = '16'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'SPIN'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Supplier Pin Code'.
+  l_fieldcat-outputlen  = '20'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'BGSTIN'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Buyer GSTIN'.
+  l_fieldcat-outputlen  = '18'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'BTRDNM'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Buyer Name'.
+  l_fieldcat-outputlen  = '25'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'BLOC'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Buyer Location'.
+  l_fieldcat-outputlen  = '20'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'BSTCD'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Buyer State'.
+  l_fieldcat-outputlen  = '13'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'BPIN'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Buyer Pin Code'.
+  l_fieldcat-outputlen  = '18'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TOGSTIN'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Shipping to GSTIN'.
+  l_fieldcat-outputlen  = '20'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TOTRD_NM'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Shipping to Name'.
+  l_fieldcat-outputlen  = '25'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TOLOC'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Shipping to Location'.
+  l_fieldcat-outputlen  = '20'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TOSTCD'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Shipping to State'.
+  l_fieldcat-outputlen  = '50'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TOPIN'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Shipping to Pin Code'.
+  l_fieldcat-outputlen  = '20'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'CNTCD'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Country'.
+  l_fieldcat-outputlen  = '10'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'FORCUR'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Foreign Curr.'.
+  l_fieldcat-outputlen  = '14'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'INVFORCUR'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Final Inv Value Foreign Curr'.
+  l_fieldcat-outputlen  = '25'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TOTINVVAL'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Final Inv. Value'.
+  l_fieldcat-outputlen  = '25'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TOTTXVAL'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Total Taxable Value'.
+  l_fieldcat-outputlen  = '25'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TOTOTHCHRG'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Total Other Charges'.
+  l_fieldcat-outputlen  = '25'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TOTIAMT'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Total IGST Amount'.
+  l_fieldcat-outputlen  = '25'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TOTCAMT'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Total CGST Amount'.
+  l_fieldcat-outputlen  = '25'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TOTSAMT'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Total SGST Amount'.
+  l_fieldcat-outputlen  = '25'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TRANSNAME'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Transporter Name'.
+  l_fieldcat-outputlen  = '50'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TRANSDOCNO'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Transporter Document No.'.
+  l_fieldcat-outputlen  = '50'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TRANSDOCDATE'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Transporter Document Date'.
+  l_fieldcat-outputlen  = '50'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'VEHNO'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Vehicle No'.
+  l_fieldcat-outputlen  = '50'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TRANSMODE'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Mode of transportation'.
+  l_fieldcat-outputlen  = '50'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'SUBSPLYTYP'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Sub types of Supply'.
+  l_fieldcat-outputlen  = '50'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'SUBSPLYDES'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Other Sub Supply Description'.
+  l_fieldcat-outputlen  = '50'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TRANSID'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Transporter ID'.
+  l_fieldcat-outputlen  = '50'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'VEHTYP'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Type of Vehicle'.
+  l_fieldcat-outputlen  = '50'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+  l_fieldcat-col_pos   = 1.
+  l_fieldcat-fieldname = 'TRANSDIST'.
+  l_fieldcat-tabname   = 'LT_EWAY'.
+  l_fieldcat-coltext   = 'Distance of transportation (in Kms)'.
+  l_fieldcat-outputlen  = '50'.
+  APPEND l_fieldcat TO i_fieldcat.
+  CLEAR l_fieldcat.
+
+
+  wa_layout-stylefname = 'STYLE'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form build_fcat1
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM build_fcat1 .
+  DATA:l_fieldcat1 TYPE lvc_s_fcat.
+  REFRESH : i_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'NO'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Doc No.'.
+  l_fieldcat1-outputlen  = '15'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'STATUS'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Status'.
+  l_fieldcat1-outputlen  = '8'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'MESSAGE1'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Message1'.
+  l_fieldcat1-outputlen  = '35'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'MESSAGE2'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Message2'.
+  l_fieldcat1-outputlen  = '35'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'IRN'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'IRN No.'.
+  l_fieldcat1-outputlen  = '64'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'EWBNO'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'EWB Number'.
+  l_fieldcat1-outputlen  = '64'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'CATG'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Category'.
+  l_fieldcat1-outputlen  = '10'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TAXSCH'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Tax Scheme'.
+  l_fieldcat1-outputlen  = '10'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'DOCTYPE'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Doc Typ'.
+  l_fieldcat1-outputlen  = '7'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TRNTYP'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Trans Typ'.
+  l_fieldcat1-outputlen  = '9'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'DT'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Doc Dt'.
+  l_fieldcat1-outputlen  = '10'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'RCHRG'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Rev Chrg'.
+  l_fieldcat1-outputlen  = '8'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'POS'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Place of supply'.
+  l_fieldcat1-outputlen  = '15'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'SGSTIN'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Supplier GSTIN'.
+  l_fieldcat1-outputlen  = '15'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'STRDNM'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Supplier Name'.
+  l_fieldcat1-outputlen  = '25'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'SLOC'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Location'.
+  l_fieldcat1-outputlen  = '10'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'SSTCD'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'State'.
+  l_fieldcat1-outputlen  = '5'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'SPIN'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Pin Code'.
+  l_fieldcat1-outputlen  = '10'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'BGSTIN'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Buyer GSTIN'.
+  l_fieldcat1-outputlen  = '15'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'BTRDNM'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Buyer Name'.
+  l_fieldcat1-outputlen  = '25'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'BLOC'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Location'.
+  l_fieldcat1-outputlen  = '10'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'BSTCD'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'State'.
+  l_fieldcat1-outputlen  = '5'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'BPIN'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Pin Code'.
+  l_fieldcat1-outputlen  = '10'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TOGSTIN'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Shipping to GSTIN'.
+  l_fieldcat1-outputlen  = '20'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TOTRD_NM'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Shipping to Name'.
+  l_fieldcat1-outputlen  = '25'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TOLOC'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Location'.
+  l_fieldcat1-outputlen  = '10'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TOSTCD'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'State'.
+  l_fieldcat1-outputlen  = '5'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TOPIN'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Pin Code'.
+  l_fieldcat1-outputlen  = '10'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'CNTCD'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Country'.
+  l_fieldcat1-outputlen  = '10'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'FORCUR'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Foreign Curr.'.
+  l_fieldcat1-outputlen  = '5'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'INVFORCUR'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Total Inv Value Foreign Curr'.
+  l_fieldcat1-outputlen  = '25'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TOTINVVAL'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Total Inv. Value'.
+  l_fieldcat1-outputlen  = '25'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TOTTXVAL'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Total Taxable Value'.
+  l_fieldcat1-outputlen  = '25'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TOTOTHCHRG'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Total Other Charges'.
+  l_fieldcat1-outputlen  = '25'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TOTIAMT'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Total IGST Amount'.
+  l_fieldcat1-outputlen  = '25'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TOTCAMT'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Total CGST Amount'.
+  l_fieldcat1-outputlen  = '25'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  l_fieldcat1-col_pos   = 1.
+  l_fieldcat1-fieldname = 'TOTSAMT'.
+  l_fieldcat1-tabname   = 'LT_EWAY1'.
+  l_fieldcat1-coltext   = 'Total SGST Amount'.
+  l_fieldcat1-outputlen  = '25'.
+  APPEND l_fieldcat1 TO i_fieldcat1.
+  CLEAR l_fieldcat1.
+
+  wa_layout-excp_fname = 'ICON'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form build_fcat2
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM build_fcat2 .
+  DATA:l_fieldcat2 TYPE lvc_s_fcat.
+  REFRESH : i_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'CHECK'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'Select'.
+  l_fieldcat2-outputlen = '8'.
+  l_fieldcat2-edit      = 'X'.
+  l_fieldcat2-checkbox  = 'X'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'REMARKS'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'Cancel Remarks'.
+  l_fieldcat2-outputlen  = '50'.
+  l_fieldcat2-edit      = 'X'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'INVOICE_NO'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'Tax Invoice'.
+  l_fieldcat2-outputlen  = '20'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'IRN'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'IRN No'.
+  l_fieldcat2-outputlen  = '64'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'EWBNO'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'EWB No'.
+  l_fieldcat2-outputlen  = '64'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'PROCESS_DATE'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'Process Dt'.
+  l_fieldcat2-outputlen  = '10'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'PROCESS_TIME'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'Process Time'.
+  l_fieldcat2-outputlen  = '14'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'ACKNO'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'Ack. No'.
+  l_fieldcat2-outputlen  = '10'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'ACKDT'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'Ack. Dt.'.
+  l_fieldcat2-outputlen  = '12'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'ACKTM'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'Ack. Tm.'.
+  l_fieldcat2-outputlen  = '10'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'ID'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'Id'.
+  l_fieldcat2-outputlen  = '8'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'BUKRS'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'CCode'.
+  l_fieldcat2-outputlen  = '5'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'WERKS'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'Plant'.
+  l_fieldcat2-outputlen  = '6'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'REGION'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'Region'.
+  l_fieldcat2-outputlen  = '6'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+
+  l_fieldcat2-col_pos   = 1.
+  l_fieldcat2-fieldname = 'CORR_SAP_DOC'.
+  l_fieldcat2-tabname   = 'LT_CANC'.
+  l_fieldcat2-coltext   = 'Billing Doc'.
+  l_fieldcat2-outputlen  = '10'.
+  APPEND l_fieldcat2 TO i_fieldcat2.
+  CLEAR l_fieldcat2.
+  IF p_cnc = 'X'.
+    l_fieldcat2-col_pos   = 1.
+    l_fieldcat2-fieldname = 'MESSAGE'.
+    l_fieldcat2-tabname   = 'LT_CANC'.
+    l_fieldcat2-coltext   = 'Message1'.
+    l_fieldcat2-outputlen  = '50'.
+    APPEND l_fieldcat2 TO i_fieldcat2.
+    CLEAR l_fieldcat2.
+
+    l_fieldcat2-col_pos   = 1.
+    l_fieldcat2-fieldname = 'MSG'.
+    l_fieldcat2-tabname   = 'LT_CANC'.
+    l_fieldcat2-coltext   = 'Message2'.
+    l_fieldcat2-outputlen  = '50'.
+    APPEND l_fieldcat2 TO i_fieldcat2.
+    CLEAR l_fieldcat2.
+  ENDIF.
+
+
+  wa_layout-stylefname = 'STYLE'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form display_alv
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM display_alv .
+  IF g_custom_container IS INITIAL.
+    CREATE OBJECT g_custom_container
+      EXPORTING
+        container_name = g_container.
+    CREATE OBJECT alv_grid
+      EXPORTING
+        i_parent = g_custom_container.
+
+    PERFORM exclude_buttons.
+    wa_layout-cwidth_opt = 'X'.
+    CALL METHOD alv_grid->set_table_for_first_display
+      EXPORTING
+        is_layout            = wa_layout
+        it_toolbar_excluding = lt_exclude
+      CHANGING
+        it_outtab            = lt_eway[]
+        it_fieldcatalog      = i_fieldcat[].
+  ELSE.
+    CALL METHOD alv_grid->refresh_table_display.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form display_alv1
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM display_alv1 .
+  IF g_custom_container1 IS INITIAL.
+    CREATE OBJECT g_custom_container1
+      EXPORTING
+        container_name = g_container1.
+    CREATE OBJECT alv_grid1
+      EXPORTING
+        i_parent = g_custom_container1.
+
+    PERFORM exclude_buttons.
+
+    CALL METHOD alv_grid1->set_table_for_first_display
+      EXPORTING
+        is_layout            = wa_layout
+        it_toolbar_excluding = lt_exclude
+      CHANGING
+        it_outtab            = lt_eway1[]
+        it_fieldcatalog      = i_fieldcat1[].
+  ELSE.
+    CALL METHOD alv_grid1->refresh_table_display.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form display_alv2
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM display_alv2 .
+  IF g_custom_container2 IS INITIAL.
+    CREATE OBJECT g_custom_container2
+      EXPORTING
+        container_name = g_container2.
+    CREATE OBJECT alv_grid2
+      EXPORTING
+        i_parent = g_custom_container2.
+
+    PERFORM exclude_buttons.
+
+    CALL METHOD alv_grid2->set_table_for_first_display
+      EXPORTING
+        is_layout            = wa_layout
+        it_toolbar_excluding = lt_exclude
+      CHANGING
+        it_outtab            = lt_canc[]
+        it_fieldcatalog      = i_fieldcat2[].
+  ELSE.
+    CALL METHOD alv_grid2->refresh_table_display.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form exclude_buttons
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM exclude_buttons .
+  REFRESH lt_exclude.
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_copy_row.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_delete_row.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_append_row.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_insert_row.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_copy.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_cut.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_paste.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_paste_new_row.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_loc_undo.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_select_all.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_sort_asc.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_sort_dsc.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_sort.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_sum.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_subtot.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+*  ls_exclude = cl_gui_alv_grid=>mc_fc_filter.
+*  APPEND ls_exclude TO lt_exclude.
+*  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_maintain_variant.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_save_variant.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_to_office.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_variant_admin.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_views.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_view_crystal.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_view_excel.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_view_grid.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+
+  ls_exclude = cl_gui_alv_grid=>mc_fc_view_lotus.
+  APPEND ls_exclude TO lt_exclude.
+  CLEAR ls_exclude.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form get_ewbno_print
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM get_ewbno_print.
+  DATA: it_msg TYPE TABLE OF zsd_msg_str.
+  DATA : obj_eprint TYPE REF TO zcl_eway_bill_print.
+  IF s_ewbno IS INITIAL .
+    MESSAGE 'Please provide input' TYPE 'S' DISPLAY LIKE 'E'.
+    STOP.
+  ELSEIF p_det EQ ' ' AND p_sum EQ ' '.
+    MESSAGE 'Please click on any check box' TYPE 'S' DISPLAY LIKE 'E'.
+    STOP.
+  ENDIF.
+
+  CREATE OBJECT obj_eprint.
+
+  LOOP AT s_ewbno.
+
+    CALL METHOD obj_eprint->get_print          "ad by akshay_D-118306
+      EXPORTING
+        ewbno   = s_ewbno-low
+        flg_det = p_det
+        flg_sum = p_sum
+      IMPORTING
+        t_msg   = DATA(t_msg).
+    APPEND LINES OF t_msg TO it_msg.
+    REFRESH t_msg.
+  ENDLOOP.
+
+  IF it_msg IS NOT INITIAL.
+    CALL FUNCTION 'RSPLSSE_ALV_POPUP'
+      EXPORTING
+        it_outtab        = it_msg
+        i_structure_name = 'ZSD_MSG_STR'
+        i_start_column   = 1
+        i_start_row      = 1
+        i_window_width   = 90
+*       i_window_heigth  = 30
+        i_window_title   = 'Print Details'.
+
+
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  GET_REPT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_rept_data .
+  DATA : lv_tino TYPE zeinv_item_data-tino.
+
+  SELECT * FROM zeinv_item_data
+    INNER JOIN zeinv_head_data ON zeinv_item_data~bukrs = zeinv_head_data~bukrs AND zeinv_item_data~vbeln = zeinv_head_data~vbeln
+    AND zeinv_item_data~tino = zeinv_head_data~tino
+    INNER JOIN zeinv_master ON zeinv_item_data~bukrs = zeinv_master~bukrs AND zeinv_item_data~vbeln = zeinv_master~sap_doc
+    AND zeinv_item_data~tino = zeinv_master~invoice_no AND zeinv_master~zmodule = 'SD'
+    INTO TABLE @DATA(lt_data)
+    WHERE zeinv_item_data~bukrs = '1000' AND zeinv_item_data~tino IN @s_ti AND zeinv_master~werks IN @s_werks
+    AND zeinv_master~process_date IN @s_budat1 AND zeinv_master~creation_date IN @s_budat1 AND zeinv_item_data~tino <> ' '.
+  IF lt_data[] IS NOT INITIAL.
+    SORT lt_data BY zeinv_item_data-tino zeinv_item_data-item.
+
+    LOOP AT lt_data ASSIGNING FIELD-SYMBOL(<ls_data>).
+      IF sy-tabix = 1.
+        lv_tino = <ls_data>-zeinv_item_data-tino.
+      ELSE.
+        IF <ls_data>-zeinv_item_data-tino = lv_tino.
+          CLEAR : <ls_data>-zeinv_head_data-totiamt,<ls_data>-zeinv_head_data-totcamt,<ls_data>-zeinv_head_data-totsamt,
+                  <ls_data>-zeinv_head_data-tottxval,<ls_data>-zeinv_head_data-totothchrg,<ls_data>-zeinv_head_data-totinvval.
+        ELSE.
+          lv_tino = <ls_data>-zeinv_item_data-tino.
+        ENDIF.
+      ENDIF.
+
+      IF gv_ewbno IS INITIAL.
+        gv_ewbno = <ls_data>-zeinv_master-ewbno.
+      ENDIF.
+    ENDLOOP.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'CCode'.
+    xfc-fieldname    = 'ZEINV_MASTER-BUKRS'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '5'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Plant'.
+    xfc-fieldname    = 'ZEINV_MASTER-WERKS'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '5'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Invoice No'.
+    xfc-fieldname    = 'ZEINV_MASTER-INVOICE_NO'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '20'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'SAP Doc.'.
+    xfc-fieldname    = 'ZEINV_MASTER-SAP_DOC'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '10'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'IRN No.'.
+    xfc-fieldname    = 'ZEINV_MASTER-IRN'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '65'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'IRN Cancelled.'.
+    xfc-fieldname    = 'ZEINV_MASTER-IRN_CANC'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Ack No.'.
+    xfc-fieldname    = 'ZEINV_MASTER-ACKNO'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '24'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Ack. Date'.
+    xfc-fieldname    = 'ZEINV_MASTER-ACKDT'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '10'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Invoice Date'.
+    xfc-fieldname    = 'ZEINV_MASTER-CREATION_DATE'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '10'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Category'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-CATG'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '10'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Transaction Typ.'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TRNTYP'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '18'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Rev. Charge.'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-RCHRG'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '9'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Orig Ref No '.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-REFINUM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '10'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Orig Ref Dt'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-REFIDT'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '10'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'User GSTIN'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-USERGSTIN'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Supplier Trade Name'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-STRDNM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '30'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Supplier Legal Name'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-SLGLNM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '30'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Supplier GSTIN'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-SGSTIN'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Supplier Address'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-SBNM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '80'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Supplier State Code'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-SSTCD'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Supplier Location'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-SLOC'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '25'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Supplier Pin'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-SPIN'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Dispatch Trade Name'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-DTRDNM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '30'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Dispatch Legal Name'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-DLGLNM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '30'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Dispatch GSTIN'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-DGSTIN'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Dispatch State Code'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-DSTCD'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Dispatch Location'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-SLOC'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '25'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Dispatch Pin'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-SPIN'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Buyer Trade Name'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-BTRDNM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '30'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Buyer Legal Name'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-BLGLNM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '30'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Buyer GSTIN'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-BGSTIN'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Buyer Address'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-BBNM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '80'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Buyer State Code'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-BSTCD'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Buyer Location'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-BLOC'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '25'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Buyer Pin'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-BPIN'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Shipto Trade Name'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TOTRD_NM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '30'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Shipto Legal Name'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TOLGLNM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '30'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Shipto GSTIN'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TOGSTIN'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Shipto State Code'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TOSTCD'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Shipto Location'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TOLOC'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '25'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Shipto Pin'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TOPIN'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Country Code'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-CNTCD'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Place of Supply'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-POS'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '18'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Nature of Transac.'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-NTR'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '18'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Total Other Charges'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TOTOTHCHRG'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Total Taxable Value'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TOTTXVAL'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Total IGST Amount'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TOTIAMT'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Total CGST Amount'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TOTCAMT'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '18'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Total SGST Amount'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TOTSAMT'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '18'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Total Invoice Amount'.
+    xfc-fieldname    = 'ZEINV_HEAD_DATA-TOTINVVAL'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '18'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Item'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-ITEM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '5'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Product Desc.'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-PRDDESC'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '30'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Product Name'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-PRDNM'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '30'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'HSN/SAC.'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-HSNCD'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'UOM'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-UNIT'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '4'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Qty'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-QTY'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Unit Price.'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-UNITPRICE'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Assessable Val.'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-SVAL'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Discount'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-DISC'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Other Charges'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-OTHCHRG'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Taxable Value'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-TXVAL'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '15'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'IGST(%)'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-IRT'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '6'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'IGST Amount'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-IAMT'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'CGST(%)'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-CRT'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '6'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'CGST Amount'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-CAMT'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'SGST(%)'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-SRT'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '6'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'SGST Amount'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-SAMT'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    CLEAR xfc.
+    xfc-reptext_ddic = 'Item Amount'.
+    xfc-fieldname    = 'ZEINV_ITEM_DATA-ITMVAL'.
+    xfc-tabname      = 'LT_DATA'.
+    xfc-outputlen    = '12'.
+    APPEND xfc TO ifc.
+
+    IF gv_ewbno IS NOT INITIAL.
+      CLEAR xfc.
+      xfc-reptext_ddic = 'EWAY Bill No'.
+      xfc-fieldname    = 'ZEINV_MASTER-EWBNO'.
+      xfc-tabname      = 'LT_DATA'.
+      xfc-outputlen    = '12'.
+      APPEND xfc TO ifc.
+
+
+      CLEAR xfc.
+      xfc-reptext_ddic = 'EWAY Bill Date'.
+      xfc-fieldname    = 'ZEINV_MASTER-EWBDT'.
+      xfc-tabname      = 'LT_DATA'.
+      xfc-outputlen    = '12'.
+      APPEND xfc TO ifc.
+
+      CLEAR xfc.
+      xfc-reptext_ddic = 'EWAY Bill Date Till'.
+      xfc-fieldname    = 'ZEINV_MASTER-EWBVALIDTILL'.
+      xfc-tabname      = 'LT_DATA'.
+      xfc-outputlen    = '12'.
+      APPEND xfc TO ifc.
+
+      CLEAR xfc.
+      xfc-reptext_ddic = 'EWAY Bill Cancel'.
+      xfc-fieldname    = 'ZEINV_MASTER-EWB_CANC'.
+      xfc-tabname      = 'LT_DATA'.
+      xfc-outputlen    = '12'.
+      APPEND xfc TO ifc.
+    ENDIF.
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+      EXPORTING
+        i_callback_program = sy-repid
+        it_fieldcat        = ifc[]
+      TABLES
+        t_outtab           = lt_data[]
+      EXCEPTIONS
+        program_error      = 1
+        OTHERS             = 2.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+  ELSE.
+    MESSAGE : 'No data found.' TYPE 'E'.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form txtid_updt
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM txtid_updt USING wa_eway LIKE LINE OF lt_eway1.
+  IF wa_eway-ewbno IS NOT  INITIAL.
+
+    lv_name = wa_eway-vbeln.
+    wa_lines-tdline = wa_eway-ewbno.
+    APPEND wa_lines TO it_lines.
+
+    CALL FUNCTION 'CREATE_TEXT'
+      EXPORTING
+        fid       = 'ZEWA'
+        flanguage = 'E'
+        fname     = lv_name
+        fobject   = 'VBBK'
+      TABLES
+        flines    = it_lines
+      EXCEPTIONS
+        no_init   = 1
+        no_save   = 2
+        OTHERS    = 3.
+    IF sy-subrc <> 0.
+    ENDIF.
+
+    CLEAR : wa_lines ,lv_name,wa_eway .
+    REFRESH : it_lines.
+  ENDIF.
+ENDFORM.
