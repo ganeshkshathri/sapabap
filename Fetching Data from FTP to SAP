@@ -1,0 +1,464 @@
+*&---------------------------------------------------------------------*
+*& Report ZMM_NCRGNFA
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT ZMM_NCRGNFA.
+
+TABLES : zmm_ncr_po.
+
+DATA :pa_user(30)  TYPE c, " FTP Server User
+        pa_pswrd(30) TYPE c, " FTP Server User's Password
+        pa_host(64)  TYPE c, " IP Address of the FTP Server
+        pa_rfcds     TYPE rfcdes-rfcdest VALUE 'SAPFTPA'. "RFC Destination,SAPFTP for Frontend
+  DATA gv_flag(1).
+  TYPES: BEGIN OF ty_user,
+           zipno     TYPE zdms_ftp-zipno,
+           zuname    TYPE zdms_ftp-zuname,
+           zpassword TYPE zdms_ftp-zpassword,
+         END OF ty_user.
+  DATA : it_ftp    TYPE STANDARD TABLE OF ty_user,
+         wa_ftp    TYPE ty_user.
+
+*  DATA : LV_NCRGNFA TYPE String.
+*    DATA : LV_NCRREMARKS TYPE String.
+*    CLEAR : lv_ncrgnfa,lv_ncrremarks.
+
+*         wa_fpklst TYPE zmm_ealpsdmr_pkl,
+*         wa_pklst  TYPE ty_pkl.
+  DATA:
+    mi_key     TYPE i VALUE 26101957, "Hardcoded Handler Key,This is always '26101957'
+    mi_pwd_len TYPE i , "For finding the length of the Password,This is used when scrambling the password
+    mi_handle  TYPE i. "Handle for Pointing to an alerady connected FTP connection,used for subsequent actions on the connected FTP session
+  DATA: BEGIN OF it_data OCCURS 0,
+          line(132) TYPE c,
+        END OF it_data,
+        wa_data LIKE LINE OF it_data.
+  CONSTANTS:c_x(1)      VALUE 'X'.
+  TYPES: BEGIN OF t_xdata,
+           line TYPE orblk,
+         END OF t_xdata.
+  DATA: x1      TYPE string,
+*      x2 TYPE xstring,
+        lt_data TYPE STANDARD TABLE OF t_xdata,
+        ls_data TYPE t_xdata.
+  DATA : pdf_tab TYPE STANDARD TABLE OF t_xdata,
+         wa_pdf  TYPE t_xdata.
+  DATA:
+    p_fpath        TYPE rlgrap-filename,
+*      path(256)    TYPE c,
+    lv_len         TYPE i,
+    bin_filesize   TYPE i,
+    lv_length      TYPE i,
+    lt_tab_string  TYPE string,
+    lt_tab_str_len TYPE i,
+    count          TYPE i VALUE 0.
+
+  TYPES : BEGIN OF ty_pkl,
+    sys_id(10) TYPE c,
+    req_id(10) TYPE c,
+    NCRNO(20)  TYPE c,
+    zebeln TYPE EBELN,
+    NCROpeningDate  TYPE string,
+    NCRStatus(5)  TYPE c,
+
+    END OF ty_pkl.
+
+    DATA : wa_pklst  TYPE ty_pkl.
+    DATA : wa_fpklst TYPE ZMM_NCR_PO.
+    DATA : wa_fpklst1 TYPE ty_pkl.
+    DATA : it_fpklst TYPE TABLE OF ty_pkl.
+    DATA : it_fpklst1 TYPE TABLE OF ZMM_NCR_PO.
+    DATA : gv_date TYPE dats.
+    DATA : it_ZMM_NCR_GNFA TYPE TABLE OF ZMM_NCR_GNFA,
+          wa_ZMM_NCR_GNFA TYPE ZMM_NCR_GNFA.
+
+
+
+SELECTION-SCREEN BEGIN OF BLOCK a1 WITH FRAME.
+*    PARAMETERS : p_chgdt TYPE sy-datum.
+
+    PARAMETERS : p_ebeln TYPE ebeln.
+*    SELECT-OPTIONS : s_ebeln FOR zmm_ncr_po-pono.
+SELECTION-SCREEN END OF BLOCK a1.
+
+    AT SELECTION-SCREEN.
+*      IF sy-batch NE 'X' AND p_chgdt is INITIAL.
+*        MESSAGE 'Date is required' TYPE 'E'.
+*
+*      ENDIF.
+
+  START-OF-SELECTION.
+    IF sy-batch = 'X'.
+*      p_chgdt = sy-datum - 1.
+      gv_date = sy-datum - 1.
+    ENDIF.
+  CLEAR gv_flag.
+  SELECT  zhost
+          zuser
+          zpass
+          FROM zltp_ftp "CLIENT SPECIFIED
+          INTO TABLE it_ftp. "WHERE mandt = sy-mandt
+*  ORDER BY PRIMARY KEY.  "ATC Manual Corrections 24.10.2018 10620642
+  " Above code is Changed by ABAP1(10652219) on 20181025 for S/4 Hana Migration
+
+  IF it_ftp[] IS NOT INITIAL.
+
+    READ TABLE it_ftp INTO wa_ftp INDEX 1.
+
+    pa_user   = wa_ftp-zuname.
+    pa_pswrd  = wa_ftp-zpassword.
+    pa_host   = wa_ftp-zipno.
+
+  ENDIF.
+
+  "FTP Communication Data Objects - [END]
+
+  SET EXTENDED CHECK OFF.
+
+  mi_pwd_len = strlen( pa_pswrd ).
+
+*************************
+  CALL FUNCTION 'HTTP_SCRAMBLE' "For Encrypting the Password
+    EXPORTING
+      source      = pa_pswrd
+      sourcelen   = mi_pwd_len
+      key         = mi_key
+    IMPORTING
+      destination = pa_pswrd.
+*************************
+  CALL FUNCTION 'FTP_CONNECT' "For connecting to the FTP Server's user directory
+    EXPORTING
+      user            = pa_user
+      password        = pa_pswrd
+      host            = pa_host
+***         HOST            = '127.0.0.1'"IP address of the FTP Server.in case if it is configured as a text,host name is case sensitive
+      rfc_destination = pa_rfcds "Using the Background SAP FTP Library as part of the SAP backend System
+    IMPORTING
+      handle          = mi_handle
+    EXCEPTIONS
+      not_connected   = 1
+      OTHERS          = 2.
+
+  IF sy-subrc = 0.
+    DATA : path(58) ."Path that points to the FTP User's Home Directory
+    DATA:extension(4),
+         lv_file        TYPE localfile,
+         lv_folder(100).
+
+    CONCATENATE 'cd' ` ` '/eAlps_Interface/JaguarNCR_LMB/' sy-sysid INTO lv_folder.
+
+    CALL FUNCTION 'FTP_COMMAND'
+      EXPORTING
+        handle        = mi_handle
+        command       = lv_folder
+      TABLES
+        data          = it_data
+      EXCEPTIONS
+        tcpip_error   = 1
+        command_error = 2
+        data_error    = 3
+        OTHERS        = 4.
+
+    IF sy-subrc <> 0.
+      WRITE: / 'Error in FTP Command'.
+      gv_flag = c_x.
+    ENDIF.
+
+    REFRESH it_data.
+
+    CALL FUNCTION 'FTP_COMMAND'
+      EXPORTING
+        handle        = mi_handle
+        command       = 'ls'
+      TABLES
+        data          = it_data
+      EXCEPTIONS
+        tcpip_error   = 1
+        command_error = 2
+        data_error    = 3
+        OTHERS        = 4.
+
+    IF sy-subrc <> 0.
+      WRITE: / 'Error in FTP Command'.
+      gv_flag = c_x.
+    ENDIF.
+
+    CLEAR: pdf_tab,path,bin_filesize.
+  LOOP AT it_data INTO wa_data WHERE line CS '.csv' AND line NS 'SAP'.     " Loop csv files and processing
+    lv_len = strlen( wa_data-line ).
+    IF lv_len + 38 GT 132.
+      lv_len = 94.
+    ENDIF.
+    p_fpath = wa_data-line+38(lv_len).
+    SHIFT p_fpath LEFT DELETING LEADING space.
+    SPLIT p_fpath AT '.' INTO: DATA(lv_fname) DATA(lv_ext).
+    SPLIT lv_fname AT '_' INTO: DATA(lv_fstart) DATA(lv_date).
+    SPLIT lv_date at '_' INTO: DATA(lv_ncr1) DATA(lv_ncr2) DATA(lv_ncrdate).
+*    IF lv_ncrdate EQ p_chgdt.
+    IF lv_ncrdate EQ gv_date.
+      path = p_fpath.
+
+      CLEAR:pdf_tab,bin_filesize.
+      CALL FUNCTION 'FTP_SERVER_TO_R3' "For Reading a file from the FTP Server to the SAP System
+        EXPORTING
+          handle        = mi_handle
+          fname         = path
+*         character_mode = 'X'
+        IMPORTING
+          blob_length   = bin_filesize
+        TABLES
+          blob          = pdf_tab
+        EXCEPTIONS
+          tcpip_error   = 1
+          command_error = 2
+          data_error    = 3
+          OTHERS        = 4.
+
+      IF sy-subrc <> 0."If File is read unSuccessfully
+        WRITE: / 'File Not Read from the FTP Server or File not found.' COLOR COL_NEGATIVE.
+        gv_flag = c_x.
+      ELSE.
+        WRITE: 'File Read from FTP server successfully.' COLOR COL_POSITIVE.
+      ENDIF.
+      IF gv_flag NE c_x.
+
+        IF pdf_tab[] IS NOT INITIAL.
+          ULINE.
+          CLEAR:lv_length,lt_tab_string,lt_tab_str_len.
+
+          LOOP AT pdf_tab INTO wa_pdf.
+            lt_tab_string = wa_pdf-line.
+            lt_tab_str_len = strlen( lt_tab_string ).
+            lv_length = lv_length + lt_tab_str_len.
+            CLEAR:lt_tab_string,lt_tab_str_len.
+          ENDLOOP.
+
+          CALL FUNCTION 'SCMS_BINARY_TO_STRING'
+            EXPORTING
+              input_length = lv_length
+            IMPORTING
+              text_buffer  = x1
+            TABLES
+              binary_tab   = pdf_tab
+            EXCEPTIONS
+              failed       = 1
+              OTHERS       = 2.
+          SPLIT x1 AT cl_abap_char_utilities=>newline INTO TABLE DATA(itab).
+          DELETE itab INDEX  1.
+          DESCRIBE TABLE itab LINES DATA(lv_lengl).
+          DELETE itab INDEX lv_lengl.
+          LOOP AT itab INTO DATA(wa_tab).
+            SPLIT wa_tab AT '|' INTO:
+
+            wa_pklst-sys_id
+            wa_pklst-req_id
+            wa_pklst-ncrno
+            wa_pklst-zebeln
+            wa_pklst-ncropeningdate
+            wa_pklst-ncrstatus.
+*            wa_pklst-zuid
+*            wa_pklst-ebeln
+*            wa_pklst-ebelp
+*            wa_pklst-zmdcc_no
+*            wa_pklst-zpacklist
+*            wa_pklst-zpkg_no
+*            wa_pklst-werks
+*            wa_pklst-lifnr
+*            wa_pklst-name1
+*            wa_pklst-zpo_hdr_descrp
+*            wa_pklst-zsplitemcode
+*            wa_pklst-zsplitemdesc
+*            wa_pklst-zheader
+*            wa_pklst-zcustmdccno
+*            wa_pklst-zstatusmdcc
+*            wa_pklst-ztype_pckng
+*            wa_pklst-zpklqty
+*            wa_pklst-zqty
+*            wa_pklst-uom
+*            wa_pklst-zaltqty
+*            wa_pklst-zuom
+*            wa_pklst-zmdnno
+*            wa_pklst-zinvno
+*            wa_pklst-mdnqty    "Ganesh-123138
+*            wa_pklst-mdnweight "Ganesh-123138
+*            wa_pklst-carrier
+*            wa_pklst-vehicleno
+*            wa_pklst-lrno
+*            wa_pklst-lrdate
+*            wa_pklst-challanno
+*            wa_pklst-challandate
+*            wa_pklst-invoiceno
+*            wa_pklst-ewaybill
+*            wa_pklst-location
+*            wa_pklst-zsubloc
+**            wa_pklst-zwarehouse "sneha--
+*            wa_pklst-storage_bin
+*            wa_pklst-dmrno
+*            wa_pklst-createddt
+*            wa_pklst-grnno
+*            wa_pklst-grndt
+*            wa_pklst-zlatitude
+*            wa_pklst-zlongitude.
+*            wa_pklst-zcreatedon = sy-datum.
+*            CLEAR: wa_pklst-grndt,wa_pklst-grnno.
+*            CLEAR: wa_pklst-grndt,wa_pklst-grnno.
+
+
+
+            "soc by Ganesh-123138
+*            REPLACE ALL OCCURRENCES OF REGEX '[^a-zA-Z0-9.]' IN wa_pklst-zlongitude WITH ''.
+*            REPLACE ALL OCCURRENCES OF REGEX '[^a-zA-Z0-9.]' IN wa_pklst-zlatitude WITH ''.
+            "eoc by Ganesh-123138
+
+*            MOVE-CORRESPONDING wa_pklst TO wa_fpklst1.
+            MOVE-CORRESPONDING wa_pklst TO wa_fpklst1.
+            APPEND wa_fpklst1 to it_fpklst.
+*            TRANSLATE wa_fpklst-zpacklist TO UPPER CASE. "by manish
+*            IF wa_fpklst-zlatitude IS NOT INITIAL AND wa_fpklst-zlongitude IS NOT INITIAL. "sneha
+*              wa_fpklst-zqrscanned = 'TRUE'.
+*            ENDIF.
+*            INSERT zmm_ealpsdmr_pkl FROM wa_fpklst.
+*            IF sy-subrc NE 0.
+*              IF wa_fpklst-zqrscanned = 'TRUE'.
+*                UPDATE zmm_ealpsdmr_pkl SET zmdcc_no = wa_fpklst-zmdcc_no
+*                                          zpacklist = wa_fpklst-zpacklist
+*                                          zpkg_no   = wa_fpklst-zpkg_no
+*                                          zpo_hdr_descrp = wa_fpklst-zpo_hdr_descrp
+*                                          zsplitemcode = wa_fpklst-zsplitemcode
+*                                          zsplitemdesc = wa_fpklst-zsplitemdesc
+*                                          zheader     = wa_fpklst-zheader
+*                                          zcustmdccno = wa_fpklst-zcustmdccno
+*                                          zstatusmdcc = wa_fpklst-zstatusmdcc
+*                                          ztype_pckng = wa_fpklst-ztype_pckng
+*                                          zpklqty   = wa_fpklst-zpklqty
+*                                          zqty      = wa_fpklst-zqty
+*                                          uom       = wa_fpklst-uom
+*                                          zaltqty   = wa_fpklst-zaltqty
+*                                          zuom      = wa_fpklst-zuom
+*                                          zmdnno    = wa_fpklst-zmdnno
+*                                          zinvno    = wa_fpklst-zinvno
+*                                          zsubloc   = wa_fpklst-zsubloc
+*                                          zlatitude = wa_fpklst-zlatitude "sneha-122171
+*                                          zlongitude = wa_fpklst-zlongitude "sneha-122171
+*                                          zqrscanned = wa_fpklst-zqrscanned "sneha-122171
+*                                          zchangedat  = sy-uzeit
+*                                          zchangedon = sy-datum
+*                                          mdnqty = wa_fpklst-mdnqty "Ganesh-123138
+*                                          mdnweight = wa_fpklst-mdnweight "Ganesh-123138
+*              WHERE zuid = wa_fpklst-zuid.
+*              ELSE.
+*                UPDATE zmm_ealpsdmr_pkl SET zmdcc_no = wa_fpklst-zmdcc_no
+*                                            zpacklist = wa_fpklst-zpacklist
+*                                            zpkg_no   = wa_fpklst-zpkg_no
+*                                            zpo_hdr_descrp = wa_fpklst-zpo_hdr_descrp
+*                                            zsplitemcode = wa_fpklst-zsplitemcode
+*                                            zsplitemdesc = wa_fpklst-zsplitemdesc
+*                                            zheader     = wa_fpklst-zheader
+*                                            zcustmdccno = wa_fpklst-zcustmdccno
+*                                            zstatusmdcc = wa_fpklst-zstatusmdcc
+*                                            ztype_pckng = wa_fpklst-ztype_pckng
+*                                            zpklqty   = wa_fpklst-zpklqty
+*                                            zqty      = wa_fpklst-zqty
+*                                            uom       = wa_fpklst-uom
+*                                            zaltqty   = wa_fpklst-zaltqty
+*                                            zuom      = wa_fpklst-zuom
+*                                            zmdnno    = wa_fpklst-zmdnno
+*                                            zinvno    = wa_fpklst-zinvno
+*                                            zsubloc   = wa_fpklst-zsubloc
+*                                            zlatitude = wa_fpklst-zlatitude "sneha-122171
+*                                            zlongitude = wa_fpklst-zlongitude "sneha-122171
+*                                            zchangedat  = sy-uzeit
+*                                            zchangedon = sy-datum
+*                                            mdnqty = wa_fpklst-mdnqty "Ganesh-123138
+*                                          mdnweight = wa_fpklst-mdnweight "Ganesh-123138
+*                WHERE zuid = wa_fpklst-zuid.
+*              ENDIF.
+*              IF sy-subrc NE 0.
+*                WRITE: / |{ wa_pklst-zuid }  error in inserting this unique ID in table.|.
+*              ENDIF.
+*
+*            ELSE.
+*              count = count + 1.
+*            ENDIF.
+          ENDLOOP.
+          CLEAR : wa_fpklst1,wa_pklst.
+          IF count NE 0.
+            WRITE: / |{ count } lines have been inserted. |.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+
+*  DELETE it_fpklst WHERE zebeln = '' or STRLEN(zeben) > 10.
+DATA : lv_match TYPE string.
+DATA : lv_date1 TYPE string.
+CLEAR : lv_match,lv_date1.
+
+  LOOP AT  it_fpklst INTO wa_fpklst1.
+
+
+   IF strlen( wa_fpklst1-ncropeningdate )  > 10.
+      lv_date1 = wa_fpklst1-ncropeningdate+0(10).
+      wa_fpklst1-ncropeningdate = lv_date1.
+      MODIFY it_fpklst FROM wa_fpklst1 TRANSPORTING ncropeningdate.
+    ENDIF.
+
+    IF wa_fpklst1-zebeln is INITIAL or strlen( wa_fpklst1-zebeln ) > 10 or strlen( wa_fpklst1-zebeln ) < 10  or wa_fpklst1-zebeln CA sy-abcde
+      or NOT wa_fpklst1-zebeln CO 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'..
+
+
+        DELETE it_fpklst.
+
+
+
+    ENDIF.
+
+
+
+
+
+
+    CLEAR : wa_fpklst1,lv_date1,wa_fpklst.
+
+
+
+  ENDLOOP.
+
+DATA: lv_date_str TYPE string,
+      lv_date2 TYPE datum.
+
+  LOOP AT it_fpklst INTO wa_fpklst1.
+
+  lv_date_str = wa_fpklst1-ncropeningdate.
+  lv_date2 = lv_date_str+6(4) && lv_date_str+3(2) && lv_date_str+0(2).
+
+*    wa_fpklst-sysreq_id = wa_fpklst1-sys_id && wa_fpklst1-req_id.
+  CONCATENATE wa_fpklst1-sys_id '_' wa_fpklst1-req_id INTO wa_fpklst-sysreq_id.
+    CONDENSE wa_fpklst-ncrno.
+    wa_fpklst-ncrno = to_upper( wa_fpklst1-ncrno ).
+*    wa_fpklst-ncrno =  wa_fpklst1-ncrno .
+    wa_fpklst-pono = wa_fpklst1-zebeln.
+*    wa_fpklst-ncropeningdate = wa_fpklst1-ncropeningdate.
+    wa_fpklst-ncropeningdate = lv_date2.
+    wa_fpklst-ncrstatus = wa_fpklst1-ncrstatus.
+*    INSERT INTO ZMM_NCR_PO VALUES wa_fpklst.
+    MODIFY zmm_ncr_po FROM wa_fpklst.
+    COMMIT WORK.
+    APPEND wa_fpklst to it_fpklst1.
+    CLEAR : wa_fpklst,wa_fpklst1.
+  ENDLOOP.
+
+
+  IF sy-subrc = 0.
+
+  ENDIF.
+
+  ENDIF.
+
+  CALL SCREEN '100'.
+
+INCLUDE zmm_ncrgnfa_status_0100o01.
+
+INCLUDE zmm_ncrgnfa_user_command_01i01.
