@@ -1,0 +1,742 @@
+FORM get_excel_data .
+  SELECT * FROM zmm_scm_lmb INTO TABLE @DATA(it_mailid) WHERE po_type = @p_potype.
+  IF sy-subrc = 0.
+    SELECT SINGLE * FROM ekko INTO @DATA(wa_ekko) WHERE ebeln = @p_ebeln.
+    IF sy-subrc = 0.
+      SELECT SINGLE name1 FROM lfa1 INTO @DATA(lv_name1) WHERE lifnr = @wa_ekko-lifnr.
+      IF sy-subrc <> 0.
+        CLEAR:lv_name1.
+      ENDIF.
+    ENDIF.
+    TYPES:BEGIN OF ty_email,
+            email      TYPE zzemail,
+            to_cc_mark TYPE zehs_mailrec,
+          END OF ty_email.
+
+    DATA : lv_size TYPE so_obj_len.
+    DATA : lt_binary_content TYPE solix_tab.
+    DATA : lv_lines TYPE i.
+
+    DATA send_request   TYPE REF TO cl_bcs.
+    DATA document       TYPE REF TO cl_document_bcs.
+    DATA :sender        TYPE REF TO cl_cam_address_bcs.
+    DATA recipient      TYPE REF TO if_recipient_bcs.
+    DATA bcs_exception  TYPE REF TO cx_bcs.
+
+    DATA: it_message TYPE TABLE OF solisti1.
+    DATA: wa_message TYPE solisti1.
+
+    DATA main_text      TYPE bcsy_text.
+    DATA: sent_to_all    TYPE os_boolean.
+    DATA :it_mail TYPE TABLE OF ty_email,
+          wa_mail TYPE ty_email.
+    DATA: v_subject TYPE so_obj_des.
+    DATA : mail_id TYPE ad_smtpadr.
+    DATA : lv_subject(50).
+
+    DATA : BEGIN OF it_attach OCCURS 0,
+             lines(262143),
+           END OF it_attach,
+           wa_attach LIKE LINE OF it_attach.
+
+    DATA : l_string(2000) TYPE c.
+    DATA : lv_index TYPE string.
+    DATA: lv_gstin_classification TYPE char40.
+
+
+    TRY.
+        send_request = cl_bcs=>create_persistent( ).
+        v_subject = |Import PO { p_ebeln }  Approved| .
+
+
+        wa_message-line = 'Respected Sir/Madam ,<BR/> <BR/>'.
+        APPEND wa_message TO it_message.
+        CLEAR wa_message.
+
+        wa_message-line = ' '.
+        APPEND wa_message TO it_message.
+        CLEAR wa_message.
+
+        wa_message-line =  '<BR/>'.
+        APPEND wa_message TO it_message.
+        CLEAR wa_message.
+
+
+        wa_message-line =  |PO No. { p_ebeln } <BR/> <BR/>|.
+        APPEND wa_message TO it_message.
+        CLEAR wa_message.
+
+        "table
+        wa_message-line =  '<BR/>'.
+        APPEND wa_message TO it_message.
+        CLEAR wa_message.
+        wa_message-line = '<TABLE  WIDTH= "100%" BORDER="1">'.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+        CONCATENATE '<TR><TD ALIGN = "CENTER" WIDTH = "10%">'
+                              '<FONT COLOR = "BLACK"><B>' 'PO no.' '</B> </FONT>'
+                                '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                              '<FONT COLOR = "BLACK"><B>' 'Vendor Name' '</B> </FONT>'
+                                '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                              '<FONT COLOR = "BLACK"><B>' 'PO Date' '</B> </FONT>'
+                                '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                              '<FONT COLOR = "BLACK"><B>' 'Value' '</B> </FONT>'
+                                '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                              '<FONT COLOR = "BLACK"><B>' 'Currency' '</B> </FONT>'
+                                '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                             '<FONT COLOR = "BLACK"><B>' 'Payment term' '</B> </FONT>'
+                               '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+
+
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                              '<FONT COLOR = "BLACK"><B>' 'Incoterm' '</B> </FONT>'
+                                '</TD></TR>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+        "values
+        CONCATENATE '<TR><TD ALIGN = "CENTER" WIDTH = "10%" >'
+                                '<FONT COLOR = "BLACK">' p_ebeln '</FONT>'
+                                  '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                                      '<FONT COLOR = "BLACK">' lv_name1'</FONT>'
+                                        '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+        DATA:lv_aedat(10) TYPE c.
+        CLEAR:lv_aedat.
+        CONCATENATE wa_ekko-aedat+6(2) '.' wa_ekko-aedat+4(2) '.' wa_ekko-aedat+0(4) INTO lv_aedat.
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                                             '<FONT COLOR = "BLACK">' lv_aedat'</FONT>'
+                                               '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+        DATA:lv_rlwrt(20) TYPE c.
+        CLEAR:lv_rlwrt.
+        lv_rlwrt = wa_ekko-rlwrt.
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                                              '<FONT COLOR = "BLACK">' lv_rlwrt'</FONT>'
+                                                '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                                              '<FONT COLOR = "BLACK">' wa_ekko-waers'</FONT>'
+                                                '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                                              '<FONT COLOR = "BLACK">' wa_ekko-zterm'</FONT>'
+                                                '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                                        '<FONT COLOR = "BLACK">' wa_ekko-inco1'</FONT>'
+                                          '</TD></TR>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+        wa_message-line = '</TABLE>'.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+        wa_message-line =  '<BR/>'.
+        APPEND wa_message TO it_message.
+
+        CLEAR wa_message.
+        "eo table
+
+        wa_message-line =  'Kindly take necessary action.<BR/> <BR/>'.
+        APPEND wa_message TO it_message.
+        CLEAR wa_message.
+
+
+
+        wa_message-line =  '<BR/>'.
+        APPEND wa_message TO it_message.
+        CLEAR wa_message.
+        wa_message-line = 'Thanks & Regards,'.
+        APPEND wa_message TO it_message.
+        CLEAR: wa_message.
+
+        wa_message-line =  '<BR/>'.
+        APPEND wa_message TO it_message.
+        CLEAR wa_message.
+
+        wa_message-line = 'L&T-MHI Power Boilers Pvt. Ltd.<BR/>'.
+        APPEND wa_message TO it_message.
+        CLEAR: wa_message.
+
+
+        main_text[] = it_message[].
+
+        document = cl_document_bcs=>create_document(
+          i_type    = 'HTM'
+          i_text    = main_text
+          i_subject = v_subject ).
+
+        send_request->set_document( document ).
+
+        sender = cl_cam_address_bcs=>create_internet_address(
+          'SAPAUTOMAIL@LNTPOWER.COM' ).
+
+        send_request->set_sender( sender ).
+
+        IF it_mailid IS NOT INITIAL.
+          LOOP AT it_mailid INTO DATA(wa_mailid).
+            mail_id  = wa_mailid-email_id.
+            recipient = cl_cam_address_bcs=>create_internet_address( mail_id ).
+            CALL METHOD send_request->add_recipient
+              EXPORTING
+                i_recipient = recipient
+                i_express   = 'X'.
+            CLEAR : mail_id ,wa_mailid.
+          ENDLOOP.
+
+        ENDIF.
+
+        CONCATENATE
+        'Purchasing Document Number'
+        'Item Number of Purchasing Document'
+        'Purchasing Document Type'
+        'Purchasing Document Category'
+        'Supplier / Supplying Plant'
+        'Purchasing organization'
+        'Purchasing Group'
+        'Purchasing Document Date'
+        'Delivery date'
+        'Material Number'
+        'Short Text'
+*        'Material Group'
+*        'Purchase Order History/Release Documentation'
+*        'Component Consumption History'
+*        'Deletion Indicator in Purchasing Document'
+*        'Item category in purchasing document'
+*        'Item Category in Purchasing Document'
+*        'Account Assignment Category'
+*        'Requirement Tracking Number'
+        'Plant'
+*        'Storage location'
+        'Purchase Order Quantity'
+        'Purchase Order Unit of Measure'
+*        'Purchase Order Quantity in Stockkeeping Unit'
+*        'Stockkeeping Unit'
+        'Net Price'
+        'Value'
+        'Currency Key'
+*        'Price unit'
+*        'Number of principal purchase agreement'
+*        'Item number of principal purchase agreement'
+*        'Target Value for Header Area per Distribution'
+*        'Total Open Value'
+*        'Open value'
+*        'Released Value'
+*        'Target Quantity'
+*        'Open Target Quantity in the Case of Outline Agreements'
+*        'Quantity Released to Date'
+*        'Start of Validity Period'
+*        'End of Validity Period'
+*        'Still to be Delivered (Quantity)'
+*        'Still to be Delivered (Value)'
+*        'Still to be Invoiced (Quantity)'
+*        'Still to be Invoiced (Value)'
+*        'Deadline for Submission of Bid/Quotation'
+*        'Origin of a Purchasing Document Item'
+*        'Collective Number'
+*        'No. of Positions'
+*        'Control indicator for purchasing document type'
+*        'Number of purchasing info record'
+*        'Package number'
+*        'Release group'
+*        'Release Strategy'
+*        'Release State'
+*        'Release Indicator: Purchasing Document'
+*        'Issuing Storage Location for Stock Transport Order'
+*        'Name of Supplier'
+*        'Order Price Unit (Purchasing)'
+*        'Tax on sales/purchases code'
+*        'Tax Jurisdiction'
+*        'Net Order Value in PO Currency'
+*        'Purchase order not yet complete'
+*        'Category of Incompleteness'
+*        'Notified Quantity'
+*        'Stock Segment'
+*        'Requirement Segment'
+*        'Hierarchy Number'
+*        'External Sort Number'
+*        'External Hierarchy Category'
+*        'Requirement Urgency (Obsolete)'
+*        'Requirement Priority (Obsolete)'
+*        'Smart Number'
+*        'Season Year'
+*        'Season'
+*        'Fashion Collection'
+*        'Fashion Theme'
+*        'PSST Grouping Rule'
+*        'PSST Group'
+*        'Characteristic Value 1'
+*        'Characteristic  Description 1'
+*        'Characteristic Value 2'
+*        'Characteristic  Description 2'
+*        'Characteristic Value 3'
+*        'Characteristic  Description 3'
+*        'Incoterms (Part 1)'
+        'Incoterms (Part 2)'
+*        'Name of Person Responsible for Creating the Object'
+*        'Full Name of PO Creator'
+*        'Overdelivery Tolerance'
+*        'Underdelivery Tolerance'
+*        'First Page Text (12)'
+*        'Payment terms'
+*        'Terms of Delivery (F05)'
+*        'Liquidated Damages (F04)'
+*        'Insurance (F07)'
+*        'Item Text (F01)'
+*        'Material PO Text'
+*        'Origin'
+*        'Destination'
+*        'Total Quantity (MT)'
+*        'Total Volume (CBM)'
+*        'Freight Tons (FRT)'
+*        'Rail'
+*        'Air'
+*        'Road'
+*        'Sea'
+*        'Distance in KM (Rail)'
+*        'Distance in KM (Air)'
+*        'Distance in KM (Road)'
+*        'Distance in NM (Sea)'
+*        '"Delivery Completed" Indicator'
+        'Payment Term'
+        'Description of Payment Term'
+*        'MSMED Scope Desc'
+*        'Name of Requisitioner/Requester'
+*        'Retention Indicator'
+*        'Retention in Percent'
+*        'Down Payment Indicator'
+*        'Down Payment Percentage'
+*        'Down Payment Amount in Document Currency'
+*        'Due Date for Down Payment'
+*        'Control Code'
+*        'Reference Text'
+*        'Works Contract'
+
+        INTO wa_attach-lines
+          SEPARATED BY cl_abap_char_utilities=>horizontal_tab.
+        APPEND wa_attach TO it_attach.
+
+        CLEAR: wa_attach.
+        IF gt_final IS NOT INITIAL.
+          SELECT ebeln, ebelp, eindt
+            FROM eket
+            INTO TABLE @DATA(it_eket)
+            FOR ALL ENTRIES IN @gt_final
+            WHERE ebeln = @gt_final-ebeln AND ebelp = @gt_final-ebelp.
+        ENDIF.
+        LOOP AT gt_final  INTO DATA(gs_final).
+          DATA:lv_menge(20) TYPE c.
+          DATA:lv_lagmg(20) TYPE c.
+          DATA:lv_netpr(20) TYPE c.
+          DATA:lv_peinh(20) TYPE c.
+          DATA:lv_ktwrt(20) TYPE c.
+          DATA:lv_ofzwt(20) TYPE c.
+          DATA:lv_ktwto(20) TYPE c.
+          DATA:lv_ktwtr(20) TYPE c.
+          DATA:lv_ktmng(20) TYPE c.
+          DATA:lv_ofzmg(20) TYPE c.
+          DATA:lv_ktmgr(20) TYPE c.
+          DATA:lv_mglief(20) TYPE c.
+          DATA:lv_wtlief(20) TYPE c.
+          DATA:lv_mginv(20) TYPE c.
+          DATA:lv_wtinv(20) TYPE c.
+          DATA:lv_azpos(20) TYPE c.
+          DATA:lv_netwr(20) TYPE c.
+          DATA:lv_lamng(20) TYPE c.
+          DATA:lv_value(20) TYPE c.
+          DATA:lv_zzuebto(20) TYPE c.
+          DATA:lv_zzuntto(20) TYPE c.
+          DATA:lv_zztot_quan(20) TYPE c.
+          DATA:lv_zztot_vol(20) TYPE c.
+          DATA:lv_zztot_fre(20) TYPE c.
+          DATA:lv_zzretpc(20) TYPE c.
+          DATA:lv_zzdppct(20) TYPE c.
+          DATA:lv_zzdpamt(20) TYPE c.
+          DATA:lv_po_date(10) TYPE c.
+          DATA:lv_del_date(10) TYPE c.
+
+          CLEAR:lv_menge,lv_lagmg,lv_netpr,lv_peinh,lv_ktwrt,lv_ofzwt,lv_ktwto,lv_ktwtr,lv_ktmng,lv_ofzmg,lv_ktmgr,lv_mglief,lv_wtlief,lv_po_date,lv_del_date,
+                lv_mginv,lv_wtinv,lv_azpos,lv_netwr,lv_lamng,lv_zzuebto,lv_zzuntto,lv_zztot_quan,lv_zztot_vol,lv_zztot_fre,lv_zzretpc,lv_zzdppct,lv_zzdpamt,lv_value.
+          lv_menge = gs_final-menge.
+          lv_lagmg = gs_final-lagmg.
+          lv_netpr = gs_final-netpr.
+          lv_peinh = gs_final-peinh.
+          lv_ktwrt = gs_final-ktwrt.
+          lv_ofzwt = gs_final-ofzwt.
+          lv_ktwto = gs_final-ktwto.
+          lv_ktwtr = gs_final-ktwtr.
+          lv_ktmng = gs_final-ktmng.
+          lv_ofzmg = gs_final-ofzmg.
+          lv_ktmgr = gs_final-ktmgr.
+          lv_mglief = gs_final-mglief.
+          lv_wtinv = gs_final-wtinv.
+          lv_azpos = gs_final-azpos.
+          lv_lamng = gs_final-lamng.
+          lv_zzuebto = gs_final-zzuebto.
+          lv_zzuntto = gs_final-zzuntto.
+          lv_zztot_quan = gs_final-zztot_quan.
+          lv_zztot_vol = gs_final-zztot_vol.
+          lv_zztot_fre = gs_final-zztot_fre.
+          lv_zzretpc = gs_final-zzretpc.
+          lv_zzdppct = gs_final-zzdppct.
+          lv_zzdpamt = gs_final-zzdpamt.
+          READ TABLE it_eket INTO DATA(wa_eket) WITH KEY ebeln = gs_final-ebeln ebelp = gs_final-ebelp.
+          IF sy-subrc = 0.
+            CONCATENATE wa_eket-eindt+6(2) '/'  wa_eket-eindt+4(2) '/' wa_eket-eindt+0(4) INTO lv_del_date.
+          ENDIF.
+          CONCATENATE gs_final-bedat+6(2) '/'  gs_final-bedat+4(2) '/' gs_final-bedat+0(4) INTO lv_po_date.
+
+          lv_value = gs_final-netpr * gs_final-MENGE.
+
+
+
+          CONDENSE gs_final-ebeln.
+          CONDENSE gs_final-ebelp.
+          CONDENSE gs_final-bsart.
+          CONDENSE gs_final-bstyp.
+          CONDENSE gs_final-superfield.
+          CONDENSE gs_final-ekorg.
+          CONDENSE gs_final-ekgrp.
+          CONDENSE gs_final-bedat.
+          CONDENSE gs_final-ematn.
+          CONDENSE gs_final-txz01.
+          CONDENSE gs_final-matkl.
+          CONDENSE gs_final-icon_po_hist.
+          CONDENSE gs_final-icon_comp_cons.
+          CONDENSE gs_final-loekz              .
+          CONDENSE gs_final-pstyp              .
+          CONDENSE gs_final-epstp              .
+          CONDENSE gs_final-knttp              .
+          CONDENSE gs_final-bednr              .
+          CONDENSE gs_final-werks              .
+          CONDENSE gs_final-lgort              .
+          CONDENSE lv_menge              .
+          CONDENSE gs_final-meins              .
+          CONDENSE lv_lagmg              .
+          CONDENSE gs_final-lmein              .
+          CONDENSE lv_netpr              .
+          CONDENSE gs_final-waers              .
+          CONDENSE lv_peinh              .
+          CONDENSE gs_final-konnr              .
+          CONDENSE gs_final-ktpnr              .
+          CONDENSE lv_ktwrt              .
+          CONDENSE lv_ofzwt              .
+          CONDENSE lv_ktwto              .
+          CONDENSE lv_ktwtr              .
+          CONDENSE lv_ktmng              .
+          CONDENSE lv_ofzmg              .
+          CONDENSE lv_ktmgr              .
+          CONDENSE gs_final-kdatb              .
+          CONDENSE gs_final-kdate              .
+          CONDENSE lv_mglief             .
+          CONDENSE     lv_wtlief             .
+          CONDENSE     lv_mginv              .
+          CONDENSE     lv_wtinv              .
+          CONDENSE     gs_final-agdat              .
+          CONDENSE     gs_final-statu              .
+          CONDENSE     gs_final-submi              .
+          CONDENSE     lv_azpos              .
+          CONDENSE     gs_final-bsakz              .
+          CONDENSE     gs_final-infnr              .
+          CONDENSE     gs_final-packno             .
+          CONDENSE     gs_final-frggr              .
+          CONDENSE     gs_final-frgsx              .
+          CONDENSE     gs_final-frgzu              .
+          CONDENSE     gs_final-frgke              .
+          CONDENSE     gs_final-reslo              .
+          CONDENSE     gs_final-vendor_name        .
+          CONDENSE     gs_final-bprme              .
+          CONDENSE     gs_final-mwskz              .
+          CONDENSE     gs_final-txjcd              .
+          CONDENSE     lv_netwr              .
+          CONDENSE     gs_final-memory             .
+          CONDENSE     gs_final-memorytype         .
+          CONDENSE     lv_lamng              .
+          CONDENSE     gs_final-sgt_scat           .
+          CONDENSE     gs_final-sgt_rcat           .
+          CONDENSE     gs_final-exlin              .
+          CONDENSE     gs_final-exsnr              .
+          CONDENSE     gs_final-ehtyp              .
+          CONDENSE     gs_final-prio_urg           .
+          CONDENSE     gs_final-prio_req           .
+          CONDENSE     gs_final-longnum            .
+          CONDENSE     gs_final-fsh_season_year    .
+          CONDENSE     gs_final-fsh_season         .
+          CONDENSE     gs_final-fsh_collection     .
+          CONDENSE     gs_final-fsh_theme          .
+          CONDENSE     gs_final-rfm_psst_rule      .
+          CONDENSE     gs_final-rfm_psst_group     .
+          CONDENSE     gs_final-wrf_charstc1       .
+          CONDENSE     gs_final-wrf_charstc1_txt   .
+          CONDENSE gs_final-wrf_charstc2       .
+          CONDENSE gs_final-wrf_charstc2_txt   .
+          CONDENSE gs_final-wrf_charstc3       .
+          CONDENSE gs_final-wrf_charstc3_txt   .
+          CONDENSE gs_final-zzinco1            .
+          CONDENSE gs_final-zzinco2            .
+          CONDENSE gs_final-zzernam            .
+          CONDENSE gs_final-zzname_textc       .
+          CONDENSE lv_zzuebto            .
+          CONDENSE lv_zzuntto            .
+          CONDENSE gs_final-zzlongtext1        .
+          CONDENSE gs_final-zzlongtext2        .
+          CONDENSE gs_final-zzlongtext3        .
+          CONDENSE gs_final-zzlongtext4        .
+          CONDENSE gs_final-zzlongtext5        .
+          CONDENSE gs_final-zzlongtext6        .
+          CONDENSE gs_final-zzlongtext7        .
+          CONDENSE gs_final-zzorigin           .
+          CONDENSE gs_final-zzdestination      .
+          CONDENSE lv_zztot_quan         .
+          CONDENSE lv_zztot_vol          .
+          CONDENSE lv_zztot_fre          .
+          CONDENSE gs_final-zzmode_rail        .
+          CONDENSE gs_final-zzmode_air         .
+          CONDENSE gs_final-zzmode_road        .
+          CONDENSE gs_final-zzmode_sea         .
+          CONDENSE gs_final-zzdist_rl          .
+          CONDENSE gs_final-zzdist_ar          .
+          CONDENSE gs_final-zzdist_rd          .
+          CONDENSE gs_final-zzdist_se          .
+          CONDENSE gs_final-zzelikz            .
+          CONDENSE gs_final-zzterm             .
+          CONDENSE gs_final-zztext1            .
+          CONDENSE gs_final-zzmsmed_scope      .
+          CONDENSE gs_final-zzafnam            .
+          CONDENSE gs_final-zzrettp            .
+          CONDENSE lv_zzretpc            .
+          CONDENSE gs_final-zzdptyp            .
+          CONDENSE lv_zzdppct            .
+          CONDENSE lv_zzdpamt            .
+          CONDENSE gs_final-zzdpdat            .
+          CONDENSE gs_final-j_1bnbm            .
+          CONDENSE gs_final-zz_ref_text        .
+          CONDENSE gs_final-zzwork_cont        .
+          CONDENSE lv_value        .
+
+
+
+          CONCATENATE
+           gs_final-ebeln
+          gs_final-ebelp
+          gs_final-bsart
+          gs_final-bstyp
+
+          gs_final-superfield
+          gs_final-ekorg
+          gs_final-ekgrp
+          lv_po_date"gs_final-bedat
+          lv_del_date
+          gs_final-ematn
+          gs_final-txz01
+*          gs_final-matkl
+*          gs_final-icon_po_hist
+*          gs_final-icon_comp_cons
+*          gs_final-loekz
+*          gs_final-pstyp
+*          gs_final-epstp
+*          gs_final-knttp
+*          gs_final-bednr
+          gs_final-werks
+*          gs_final-lgort
+          lv_menge
+          gs_final-meins
+*          lv_lagmg
+*          gs_final-lmein
+          lv_netpr
+          lv_value
+          gs_final-waers
+*          lv_peinh
+*          gs_final-konnr
+*          gs_final-ktpnr
+*          lv_ktwrt
+*          lv_ofzwt
+*          lv_ktwto
+*          lv_ktwtr
+*          lv_ktmng
+*          lv_ofzmg
+*          lv_ktmgr
+*          gs_final-kdatb
+*          gs_final-kdate
+*          lv_mglief
+*          lv_wtlief
+*          lv_mginv
+*          lv_wtinv
+*          gs_final-agdat
+*          gs_final-statu
+*          gs_final-submi
+*          lv_azpos
+*          gs_final-bsakz
+*          gs_final-infnr
+*          gs_final-packno
+*          gs_final-frggr
+*          gs_final-frgsx
+*          gs_final-frgzu
+*          gs_final-frgke
+*          gs_final-reslo
+*          gs_final-vendor_name
+*          gs_final-bprme
+*          gs_final-mwskz
+*          gs_final-txjcd
+*          lv_netwr
+*          gs_final-memory
+*          gs_final-memorytype
+*          lv_lamng
+*          gs_final-sgt_scat
+*          gs_final-sgt_rcat
+*          gs_final-exlin
+*          gs_final-exsnr
+*          gs_final-ehtyp
+*          gs_final-prio_urg
+*          gs_final-prio_req
+*          gs_final-longnum
+*          gs_final-fsh_season_year
+*          gs_final-fsh_season
+*          gs_final-fsh_collection
+*          gs_final-fsh_theme
+*          gs_final-rfm_psst_rule
+*          gs_final-rfm_psst_group
+*          gs_final-wrf_charstc1
+*          gs_final-wrf_charstc1_txt
+*          gs_final-wrf_charstc2
+*          gs_final-wrf_charstc2_txt
+*          gs_final-wrf_charstc3
+*          gs_final-wrf_charstc3_txt
+*          gs_final-zzinco1
+          gs_final-zzinco2
+*          gs_final-zzernam
+*          gs_final-zzname_textc
+*          lv_zzuebto
+*          lv_zzuntto
+*          gs_final-zzlongtext1
+*          gs_final-zzlongtext2
+*          gs_final-zzlongtext3
+*          gs_final-zzlongtext4
+*          gs_final-zzlongtext5
+*          gs_final-zzlongtext6
+*          gs_final-zzlongtext7
+*          gs_final-zzorigin
+*          gs_final-zzdestination
+*          lv_zztot_quan
+*          lv_zztot_vol
+*          lv_zztot_fre
+*          gs_final-zzmode_rail
+*          gs_final-zzmode_air
+*          gs_final-zzmode_road
+*          gs_final-zzmode_sea
+*          gs_final-zzdist_rl
+*          gs_final-zzdist_ar
+*          gs_final-zzdist_rd
+*          gs_final-zzdist_se
+*          gs_final-zzelikz
+          gs_final-zzterm
+          gs_final-zztext1
+*          gs_final-zzmsmed_scope
+*          gs_final-zzafnam
+*          gs_final-zzrettp
+*          lv_zzretpc
+*          gs_final-zzdptyp
+*          lv_zzdppct
+*          lv_zzdpamt
+*          gs_final-zzdpdat
+*          gs_final-j_1bnbm
+*          gs_final-zz_ref_text
+*          gs_final-zzwork_cont
+
+
+            INTO wa_attach-lines
+             SEPARATED BY cl_abap_char_utilities=>horizontal_tab.
+          APPEND wa_attach TO it_attach.
+          CLEAR wa_attach.
+          CLEAR: gs_final.
+        ENDLOOP.
+
+        IF it_attach[] IS NOT INITIAL.
+          CALL FUNCTION 'SCMS_TEXT_TO_BINARY'
+            TABLES
+              text_tab   = it_attach
+              binary_tab = lt_binary_content
+            EXCEPTIONS
+              failed     = 1
+              OTHERS     = 2.
+
+          IF sy-subrc NE 0.
+            REFRESH lt_binary_content.
+          ENDIF.
+
+          CLEAR lv_lines.
+          DESCRIBE TABLE it_attach LINES lv_lines.
+          READ TABLE it_attach INTO wa_attach INDEX lv_lines.
+*        lv_size = ( lv_lines - 1 ) * 600 + strlen( wa_attach ).
+          lv_size = '999999999999'.
+          CLEAR lv_subject.
+          lv_subject = |Import PO  { p_ebeln }  Approved|.
+
+
+          document->add_attachment(
+            i_attachment_type    = 'XLS'
+            i_attachment_subject = lv_subject    " your file name
+            i_attachment_size    = lv_size          " output of the string_to_solix method
+            i_att_content_hex    = lt_binary_content ).
+
+          send_request->set_document( document ).
+
+          CLEAR: wa_attach , lv_size , lv_lines.
+        ENDIF.
+
+        sent_to_all = send_request->send( i_with_error_screen = 'X' ).
+        COMMIT WORK.
+        IF sent_to_all IS NOT INITIAL.
+          MESSAGE 'Mail Sent' TYPE 'S'.
+          WAIT UP TO 2 SECONDS.
+        ENDIF.
+      CATCH cx_bcs INTO bcs_exception.
+    ENDTRY.
+
+    CLEAR   :wa_mail.
+    REFRESH : it_mail , it_attach ,lt_binary_content .
+  ENDIF.
+ENDFORM.
