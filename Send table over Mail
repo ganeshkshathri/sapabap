@@ -1,0 +1,228 @@
+FORM send_mail .
+
+  TYPES:BEGIN OF ty_email,
+          email      TYPE zzemail,
+          to_cc_mark TYPE zehs_mailrec,
+        END OF ty_email.
+
+  DATA : lv_size TYPE so_obj_len.
+  DATA : lt_binary_content TYPE solix_tab.
+  DATA : lv_lines TYPE i.
+
+  DATA send_request   TYPE REF TO cl_bcs.
+  DATA document       TYPE REF TO cl_document_bcs.
+  DATA :sender        TYPE REF TO cl_cam_address_bcs.
+  DATA recipient      TYPE REF TO if_recipient_bcs.
+  DATA bcs_exception  TYPE REF TO cx_bcs.
+
+  DATA: it_message TYPE TABLE OF solisti1.
+  DATA: wa_message TYPE solisti1.
+
+  DATA main_text      TYPE bcsy_text.
+  DATA: sent_to_all    TYPE os_boolean.
+  DATA :it_mail TYPE TABLE OF ty_email,
+        wa_mail TYPE ty_email.
+  DATA: v_subject TYPE so_obj_des.
+  DATA : mail_id TYPE ad_smtpadr.
+  DATA : lv_subject(50).
+
+
+  DATA : l_string(2000) TYPE c.
+  DATA : lv_index TYPE string.
+  DATA: lv_gstin_classification TYPE char40.
+
+
+  TRY.
+      send_request = cl_bcs=>create_persistent( ).
+      v_subject = |{ p_vbeln }| .
+
+
+      wa_message-line = 'Respected Sir/Madam ,<BR/> <BR/>'.
+      APPEND wa_message TO it_message.
+      CLEAR wa_message.
+
+      wa_message-line = ' '.
+      APPEND wa_message TO it_message.
+      CLEAR wa_message.
+
+      wa_message-line =  '<BR/>'.
+      APPEND wa_message TO it_message.
+      CLEAR wa_message.
+
+
+      wa_message-line =  |Sales Order { salesdocument } <BR/> <BR/>|.
+      APPEND wa_message TO it_message.
+      CLEAR wa_message.
+
+      "table
+      wa_message-line =  '<BR/>'.
+      APPEND wa_message TO it_message.
+      CLEAR wa_message.
+      wa_message-line = '<TABLE  WIDTH= "100%" BORDER="1">'.
+      APPEND wa_message TO it_message.
+      CLEAR  wa_message.
+
+      CONCATENATE '<TR><TD ALIGN = "CENTER" WIDTH = "10%">'
+                            '<FONT COLOR = "BLACK"><B>' 'Line no.' '</B> </FONT>'
+                              '</TD>'  INTO wa_message-line.
+      APPEND wa_message TO it_message.
+      CLEAR  wa_message.
+
+
+
+      CONCATENATE '<TD ALIGN = "CENTER">'
+                            '<FONT COLOR = "BLACK"><B>' 'Short Text' '</B> </FONT>'
+                              '</TD>'  INTO wa_message-line.
+      APPEND wa_message TO it_message.
+      CLEAR  wa_message.
+
+
+
+      CONCATENATE '<TD ALIGN = "CENTER">'
+                            '<FONT COLOR = "BLACK"><B>' 'Quantity' '</B> </FONT>'
+                              '</TD>'  INTO wa_message-line.
+      APPEND wa_message TO it_message.
+      CLEAR  wa_message.
+
+      CONCATENATE '<TD ALIGN = "CENTER">'
+                            '<FONT COLOR = "BLACK"><B>' 'Gross Price' '</B> </FONT>'
+                              '</TD>'  INTO wa_message-line.
+      APPEND wa_message TO it_message.
+      CLEAR  wa_message.
+
+
+
+
+
+
+      CONCATENATE '<TD ALIGN = "CENTER">'
+                            '<FONT COLOR = "BLACK"><B>' 'Net Value of Item' '</B> </FONT>'
+                              '</TD></TR>'  INTO wa_message-line.
+      APPEND wa_message TO it_message.
+      CLEAR  wa_message.
+
+      "values
+      DATA:lv_menge(20) TYPE c.
+      DATA:lv_tbtwr(20) TYPE c.
+      DATA:lv_netwr(20) TYPE c.
+      DATA:lv_extrow(20) TYPE c.
+
+      LOOP AT it_final INTO DATA(wa_table_value) WHERE check = 'X'.
+        CLEAR:lv_extrow.
+        lv_extrow = |{ wa_table_value-extrow ALPHA = OUT }|.
+        CONDENSE lv_extrow.
+        CONCATENATE '<TR><TD ALIGN = "CENTER" WIDTH = "10%" >'
+                                '<FONT COLOR = "BLACK">' lv_extrow '</FONT>'
+                                  '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                                      '<FONT COLOR = "BLACK">' wa_table_value-ktext1'</FONT>'
+                                        '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+        CLEAR:lv_menge.
+        lv_menge = wa_table_value-menge.
+        CONDENSE lv_menge.
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                                             '<FONT COLOR = "BLACK">' lv_menge'</FONT>'
+                                               '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+        CLEAR:lv_tbtwr.
+        lv_tbtwr = wa_table_value-tbtwr.
+        CONDENSE lv_tbtwr.
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                                              '<FONT COLOR = "BLACK">' lv_tbtwr'</FONT>'
+                                                '</TD>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+        CLEAR:lv_netwr.
+        lv_netwr = wa_table_value-netwr.
+        CONDENSE lv_netwr.
+
+        CONCATENATE '<TD ALIGN = "CENTER">'
+                                        '<FONT COLOR = "BLACK">' lv_netwr'</FONT>'
+                                          '</TD></TR>'  INTO wa_message-line.
+        APPEND wa_message TO it_message.
+        CLEAR  wa_message.
+
+      ENDLOOP.
+
+      wa_message-line = '</TABLE>'.
+      APPEND wa_message TO it_message.
+      CLEAR  wa_message.
+      wa_message-line =  '<BR/>'.
+      APPEND wa_message TO it_message.
+
+      CLEAR wa_message.
+      "eo table
+
+      wa_message-line =  'Kindly take necessary action.<BR/> <BR/>'.
+      APPEND wa_message TO it_message.
+      CLEAR wa_message.
+
+
+
+      wa_message-line =  '<BR/>'.
+      APPEND wa_message TO it_message.
+      CLEAR wa_message.
+      wa_message-line = 'Thanks & Regards,'.
+      APPEND wa_message TO it_message.
+      CLEAR: wa_message.
+
+      wa_message-line =  '<BR/>'.
+      APPEND wa_message TO it_message.
+      CLEAR wa_message.
+
+      wa_message-line = 'L&T-MHI Power Boilers Pvt. Ltd.<BR/>'.
+      APPEND wa_message TO it_message.
+      CLEAR: wa_message.
+
+
+      main_text[] = it_message[].
+
+      document = cl_document_bcs=>create_document(
+        i_type    = 'HTM'
+        i_text    = main_text
+        i_subject = v_subject ).
+
+      send_request->set_document( document ).
+
+      sender = cl_cam_address_bcs=>create_internet_address(
+        'SAPAUTOMAIL@LNTPOWER.COM' ).
+
+      send_request->set_sender( sender ).
+
+      IF it_mail IS NOT INITIAL.
+        LOOP AT it_mail INTO DATA(wa_mailid).
+          mail_id  = wa_mailid-email.
+          recipient = cl_cam_address_bcs=>create_internet_address( mail_id ).
+          CALL METHOD send_request->add_recipient
+            EXPORTING
+              i_recipient = recipient
+              i_express   = 'X'.
+          CLEAR : mail_id ,wa_mailid.
+        ENDLOOP.
+
+      ENDIF.
+
+
+
+      sent_to_all = send_request->send( i_with_error_screen = 'X' ).
+      COMMIT WORK.
+      IF sent_to_all IS NOT INITIAL.
+        MESSAGE 'Mail Sent' TYPE 'S'.
+        WAIT UP TO 2 SECONDS.
+      ENDIF.
+    CATCH cx_bcs INTO bcs_exception.
+  ENDTRY.
+
+  CLEAR   :wa_mail.
+  REFRESH : it_mail.
+
+ENDFORM.
