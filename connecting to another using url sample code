@@ -1,16 +1,4 @@
-*&------------------------------------------------------------------------*
-*& Report ZSD_EWAYBILL_EPC
-*&------------------------------------------------------------------------*
-*& Program : ZSD_EWAYBILL_EPC *
-*& Created by : Sneha Singh- LTIMINDTREE *
-*& Requester : Suraj Singh - LTIMINDTREE *
-*& Created on : 05.12.2024 *
-*& Project : 10912-01 *
-*& Ticket No : 122080*
-*& WIMS No : *
-*& Workbenc Req: Developement -SEDK984701,SEDK984788,SEDK984800,SEDK984880,
-*&                             SEDK984782
-*&-------------------------------------------------------------------------*
+
 REPORT zsd_ewaybill_epc.
 TABLES: vbrk,vbrp,bkpf.
 
